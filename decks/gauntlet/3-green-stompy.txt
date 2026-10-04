@@ -1,0 +1,16 @@
+# Mono-Green Stompy: mana elves into big bodies, fight spells as removal.
+Name Green Stompy
+Deck
+4 Llanowar Elves
+4 Kraven's Cats
+4 Attercop
+3 Champion of Dusan
+2 Eager Trufflesnout
+2 Beast-Kin Ranger
+4 Ordinary Bear
+4 Professional Wrestler
+4 Beorn, Reluctant Host
+2 Gigantosaurus
+4 Rabid Bite
+2 Giant Growth
+21 Forest

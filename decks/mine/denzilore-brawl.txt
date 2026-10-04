@@ -1,0 +1,42 @@
+Commander
+1 Denzilore Fatehold (FRA) 128
+
+Deck
+1 Eye of Jace (FRA) 170
+1 Perfected Theory (FRA) 34
+1 Unsummon (M20) 78
+1 Ajani Resolute (FRA) 195
+1 Tomik, Orzhov Lawmage (FRA) 206
+1 Teyo, Lightshield Expert (FRA) 204
+1 Unflinching Hortimancer (FRA) 23
+1 Enlightened Confidant (FRA) 5
+1 Afterthought Sentry (FRA) 166
+1 Prophesied End (FRA) 17
+1 Icy Reception (FRA) 30
+1 Fatehold Charm (FRA) 132
+1 Predictive Preparations (FRA) 16
+1 Surgical Precision (FRA) 22
+1 Medic's Kitesail (FRA) 173
+1 Graft Surgeon (FRA) 10
+1 Shatterwing Pegasus (FRA) 21
+1 Yoshimaru, Beloved Companion (FRA) 209
+1 Arni, Humble Scribe (FRA) 211
+1 Mindseeker Oculus (FRA) 33
+1 Fatehold Chronologist (FRA) 133
+1 Prudent Fateseer (FRA) 146
+1 Chandra, Chill of Compliance (FRA) 212
+1 Memory Trap (FRA) 15
+1 Infinite Coursework (FRA) 31
+1 Murmuring Volume (FRA) 174
+1 Hapatra, the Desert Frost (FRA) 215
+1 Traxos, Academy Guardian (FRA) 222
+1 The Theorist, Jace Beleren (FRA) 43
+1 Protege's Awakening (FRA) 37
+1 Fateshaper Aspirant (FRA) 6
+1 Saheeli, Consul of Oversight (FRA) 203
+1 Undulating Witness (FRA) 45
+1 Ruric Thar, Biomagus (FRA) 219
+1 Archive Arbiter (FRA) 167
+1 Fatehold Annex (FRA) 177
+11 Plains (FIN) 294
+12 Island (FIN) 297

@@ -1,0 +1,88 @@
+Commander
+1 Eddie Brock
+
+Deck
+1 Llanowar Elves
+1 Moonshadow
+1 Bloodghast
+1 Bloom Tender
+1 Gollum, Riddle Master
+1 Ruby, Daring Tracker
+1 The Sackville-Bagginses
+1 Reassembling Skeleton
+1 Allosaurus Shepherd
+1 Thrashing Brontodon
+1 Dori, Bearer of Friends
+1 Fearsome Goblin Pair
+1 Infernal Vessel
+1 Midnight Reaper
+1 Primal Witchstalker
+1 Spinner of Souls
+1 Vraska, the Cutting Glare
+1 Aerid Konstrari
+1 Curse-Marred Demon
+1 Darklight Phoenix
+1 Graveshifter
+1 Professional Wrestler
+1 Smaug the Magnificent
+1 Black Cat, Cunning Thief
+1 Gwenom, Remorseless
+1 High-Society Hunter
+1 Overlord of the Hauntwoods
+1 Rakdos, the Muscle
+1 Wildwood Escort
+1 Apex Witchstalker
+1 Immortal Phoenix
+1 Massacre Wurm
+1 Unforgiving Aim
+1 Swiftfoot Boots
+1 Rune-Scarred Demon
+1 Budding Insurgent
+1 Arcane Signet
+1 Phyrexian Arena
+1 Binding the Old Gods
+1 Whip of Erebos
+1 Garruk, Curse Breaker
+1 Garruk, Veiled Butcher
+1 Vivien Reid
+1 Burst Lightning
+1 Eaten Alive
+1 Abrade
+1 Abrupt Decay
+1 Deadly Dispute
+1 Farseek
+1 Feed the Swarm
+1 Bilbo's Deadly Slice
+1 Cultivate
+1 Deadly Complication
+1 Fiery Annihilation
+1 Grapple with Death
+1 Hero's Downfall
+1 Murder
+1 Overkill
+1 Wrath of the Bloodmane
+1 Broken Wings
+1 Extended Absence
+1 Avengers Tower
+1 Blazemire Verge
+1 Blood Crypt
+1 Bloodfell Caves
+1 Command Tower
+1 Evolving Wilds
+1 Fabled Passage
+1 Jungle Hollow
+1 Multiversal Passage
+1 Omashu City
+1 Overgrown Tomb
+1 Razortrap Gorge
+1 Rockfall Vale
+1 Rugged Highlands
+1 Savage Mansion
+1 Stomping Ground
+1 Temple of Abandon
+1 Temple of Malady
+1 Temple of Malice
+1 Underground Mortuary
+9 Swamp
+4 Mountain
+5 Forest

@@ -1,0 +1,21 @@
+{
+  "name": "the-crucible",
+  "version": "0.1.0",
+  "description": "Monte Carlo MTG Arena matchup simulator driven by Forge card scripts",
+  "scripts": {
+    "fetch-cards": "bash scripts/fetch-forge.sh",
+    "sim": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  },
+  "type": "module",
+  "private": true
+}

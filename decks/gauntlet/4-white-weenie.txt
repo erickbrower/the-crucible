@@ -1,0 +1,16 @@
+# Mono-White Weenie: wide board of small fliers and lifegain, enchantment-based removal.
+Name White Weenie
+Deck
+4 Healer's Hawk
+3 Savannah Lions
+4 Descendant of Storms
+4 Leonin Skyhunter
+4 Ajani's Pridemate
+2 Voice of Victory
+3 Knight of Grace
+4 Inspiring Overseer
+3 Shatterwing Pegasus
+4 Pacifism
+3 Banishing Light
+2 Sudden Strike
+20 Plains

@@ -1,0 +1,44 @@
+Commander
+1 Mabel, Valley Hero (FRA) 274
+
+Deck
+1 Enlightened Confidant (FRA) 5
+1 Teyo, Lightshield Expert (FRA) 204
+1 Tomik, Orzhov Lawmage (FRA) 206
+1 Unflinching Hortimancer (FRA) 23
+1 Marwyn, the Clearcutter (FRA) 249
+1 Eardrum Rattler (FRA) 81
+1 Skilled Battlecarver (FRA) 92
+1 Chandra's Emberling (FRA) 76
+1 Graft Surgeon (FRA) 10
+1 Shatterwing Pegasus (FRA) 21
+1 Yoshimaru, Beloved Companion (FRA) 209
+1 Yuriko, Blade of the Mighty (FRA) 210
+1 Arni, Renowned Champion (FRA) 243
+1 Heartstring Puller (FRA) 86
+1 Saheeli, Consul of Oversight (FRA) 203
+1 Fateshaper Aspirant (FRA) 6
+1 Jiang Yanggu, Alone (FRA) 246
+1 Tether Technician (FRA) 94
+1 Winter, Team Player (FRA) 256
+1 Afterthought Sentry (FRA) 166
+1 Archive Arbiter (FRA) 167
+1 Ghalta the Immovable (FRA) 197
+1 Ajani Resolute (FRA) 195
+1 Ajani Unrelenting (FRA) 242
+1 Way of the Warlord (FRA) 255
+1 Prophesied End (FRA) 17
+1 Surgical Precision (FRA) 22
+1 Memory Trap (FRA) 15
+1 Wrath of the Bloodmane (FRA) 96
+1 Awaken the Inferno (FRA) 74
+1 Ajani's Anguish (FRA) 72
+1 Predictive Preparations (FRA) 16
+1 Artifist Acumen (FRA) 73
+1 Eye of Jace (FRA) 170
+1 Medic's Kitesail (FRA) 173
+1 Murmuring Volume (FRA) 174
+1 Dedicated Commons (FRA) 175
+1 Room of Refuge (FRA) 188
+11 Plains (FIN) 294
+10 Mountain (FIN) 303

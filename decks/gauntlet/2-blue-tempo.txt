@@ -1,0 +1,16 @@
+# Mono-Blue Tempo: flash fliers, counterspells and bounce (the deck that beat him on ladder).
+Name Blue Tempo
+Deck
+4 Spectral Sailor
+3 Mischievous Mystic
+4 Mysterio's Phantasm
+4 Elementalist Adept
+3 Floodpits Drowner
+4 Beetle, Legacy Criminal
+2 Long Lake Nuisance
+4 It'll Quench Ya!
+4 Essence Scatter
+2 Negate
+4 Opt
+2 Whoosh!
+20 Island

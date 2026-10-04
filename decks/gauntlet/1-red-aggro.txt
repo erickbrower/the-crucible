@@ -1,0 +1,18 @@
+# Mono-Red Aggro: cheap hasty threats backed by burn that can go face.
+Name Red Aggro
+Deck
+4 Fanatical Firebrand
+4 Kavaron Harrier
+4 Viashino Pyromancer
+3 Heartfire Immolator
+3 Gallia, the Merrymaker
+4 Goblin Boarders
+2 Brazen Scourge
+4 Shock
+4 Burst Lightning
+1 Lightning Strike
+1 No Admittance
+2 Scorching Dragonfire
+2 Goblin Surprise
+2 Thunder Salvo
+20 Mountain
