@@ -1,7 +1,7 @@
 // Heuristic player AI. One policy drives both seats; deck "style" (aggro / midrange / control,
 // inferred from the list) nudges a few decisions such as trading, racing and holding counter mana.
 import type { Ability, CardDef, Color, Effect } from '../cards/model.js';
-import { COLORS } from '../cards/model.js';
+import { COLORS, cantBeCountered } from '../cards/model.js';
 import type { Ctx, Game, StackItem, Target } from '../engine/game.js';
 import { matches, FilterCtx } from '../engine/filters.js';
 import type { CardInst, Perm, Player } from '../engine/state.js';
@@ -650,38 +650,143 @@ export function endOfTurnWindow(g: Game, p: Player) {
 }
 
 // ------------------------------------------------------------------ responses
+// ------------------------------------------------------------------ stack responses
+// One rule drives every response: act only if it saves (or kills) something worth more than
+// the card we spend doing it. Three obvious cases are covered:
+//   1. counter it      - their spell is worth more than our counterspell (includes counter wars)
+//   2. protect         - their removal targets our creature and a trick in hand saves it
+//   3. punish a trick  - they pump/enchant their creature; we kill it in response, fizzling the trick
+
+export function resetHints() { hint.perm = undefined; hint.spell = undefined; hint.charm = undefined; }
+
+const ctxOfItem = (item: StackItem): Ctx => ({ p: item.controller, card: item.card, x: item.x, kicked: item.kicked, targets: [] });
+const myTargets = (item: StackItem, me: number, harmfulOnly: boolean) =>
+  (item.plan ?? []).filter(st => !harmfulOnly || isHarmful(st.effect))
+    .flatMap(st => (st.targets ?? []).map(t => ({ t, effect: st.effect })))
+    .filter(x => x.t.kind === 'perm' && x.t.perm.controller === me) as { t: { kind: 'perm'; perm: Perm }; effect: Effect }[];
+
+/** What letting this opponent's spell resolve would cost the responder. */
 function spellThreat(g: Game, item: StackItem, responder: number): number {
   const d = item.card.def;
+  if (cantBeCountered(d)) return -99;
+  // a counterspell aimed at our spell is exactly as bad as losing that spell
+  const counterStep = item.plan?.find(st => st.effect.api === 'Counter');
+  if (counterStep) {
+    const mine = counterStep.targets?.find(t => t.kind === 'spell' && t.item.controller === responder) as { item: StackItem } | undefined;
+    if (mine) return cardValue(g, g.players[responder], mine.item.card) + (mine.item.card.isCommander ? 3 : 0) + 1;
+  }
   let t: number;
   if (d.types.includes('Creature')) t = cardValue(g, g.players[item.controller], item.card);
   else t = d.mv + 1;
   if (d.types.includes('Planeswalker')) t += 2;
   if (item.card.isCommander) t += 3;
+  const hit = myTargets(item, responder, true);
+  if (hit.length) t = Math.max(t, hit.reduce((a, x) => a + permValue(g, x.t.perm), 0) + 1);
   if (d.spell) {
     const e = d.spell.effect;
-    if (isHarmful(e) && g.bf.some(x => x.controller === responder && !isLandCard(x))) t += 2.5;
     if (e.api === 'DestroyAll' || e.api === 'DamageAll') t += 4;
     if (['Draw', 'Scry', 'Surveil', 'Dig'].includes(e.api) && d.mv <= 2) t -= 2;
   }
   return t + item.x;
 }
 
-export function respondToSpell(g: Game, responder: Player, item: StackItem) {
-  if (item.controller === responder.id) return;
-  const threat = spellThreat(g, item, responder.id);
-  const threshold = responder.style === 'control' ? 3 : 4;
-  if (threat < threshold) return;
-  for (const card of counterCards(responder)) {
+function tryCounter(g: Game, me: Player, item: StackItem): boolean {
+  const threat = spellThreat(g, item, me.id);
+  for (const card of counterCards(me)) {
+    if (threat < cardValue(g, me, card) - (me.style === 'control' ? 1 : 0)) continue;   // not worth the card
     const eff = card.def.spell!.effect;
     const ce = eff.api === 'Counter' ? eff : eff.choices!.find(e => e.api === 'Counter')!;
-    const f = ce.params.ValidTgts ?? 'Card';
-    if (!matches(f, g.subjectOf(item.card, item.controller), { you: responder.id })) continue;
+    if (!matches(ce.params.ValidTgts ?? 'Card', g.subjectOf(item.card, item.controller), { you: me.id })) continue;
     const unless = ce.params.UnlessCost ? parseInt(ce.params.UnlessCost, 10) : 0;
     if (unless && g.availableMana(item.controller) >= unless) continue;
-    if (!g.canCast(responder.id, card)) continue;
-    withHint({ spell: item, charm: eff.api === 'Charm' ? 'Counter' : undefined }, () => g.castSpell(responder.id, card));
-    return;
+    if (!g.canCast(me.id, card)) continue;
+    withHint({ spell: item, charm: eff.api === 'Charm' ? 'Counter' : undefined }, () => g.castSpell(me.id, card));
+    return true;
   }
+  return false;
+}
+
+interface Protection { hexproof: boolean; indestructible: boolean; toughness: number }
+/** Instant tricks that can save one of our creatures: hexproof, indestructible or extra toughness. */
+function protectionOf(g: Game, card: CardInst, pid: number): Protection | undefined {
+  const d = card.def;
+  if (!isInstantSpeed(d) || !d.spell || d.types.includes('Creature')) return undefined;
+  const pr: Protection = { hexproof: false, indestructible: false, toughness: 0 };
+  const ctx: Ctx = { p: pid, card, x: 0, kicked: false, targets: [] };
+  let e: Effect | undefined = d.spell.effect, ok = false;
+  for (let i = 0; e && i < 6; e = e.sub, i++) {
+    if (isHarmful(e)) return undefined;
+    const kws = (e.params.KW ?? '').split(' & ');
+    if (e.api === 'Pump') {
+      ok = true;
+      if (kws.includes('Hexproof') || kws.includes('Shroud')) pr.hexproof = true;
+      if (kws.includes('Indestructible')) pr.indestructible = true;
+      pr.toughness += Math.max(0, g.amount(e.params.NumDef, ctx));
+    } else if (e.api === 'PutCounter' && (e.params.CounterType ?? 'P1P1') === 'P1P1') {
+      ok = true; pr.toughness += g.amount(e.params.CounterNum ?? '1', ctx);
+    }
+  }
+  if (!ok || !d.spell.effect.params.ValidTgts) return undefined;
+  return pr;
+}
+
+/** Would `victim` survive `eff` if we gave it `pr`? */
+function survives(g: Game, victim: Perm, eff: Effect, item: StackItem, pr: Protection): boolean {
+  if (pr.hexproof) return true;                       // the spell loses its target
+  const ctx = ctxOfItem(item);
+  const st = g.statsOf(victim);
+  const left = st.toughness - victim.damage + pr.toughness;
+  switch (eff.api) {
+    case 'Destroy': return pr.indestructible;
+    case 'DealDamage': return pr.indestructible || left > g.amount(eff.params.NumDmg, ctx, item.card.def);
+    case 'Pump': return left + g.amount(eff.params.NumDef, ctx, item.card.def) > 0;
+    case 'PutCounter': return left - g.amount(eff.params.CounterNum ?? '1', ctx, item.card.def) > 0;
+  }
+  return false;                                        // exile, bounce, etc.
+}
+
+function tryProtect(g: Game, me: Player, item: StackItem): boolean {
+  for (const { t, effect } of myTargets(item, me.id, true)) {
+    const victim = t.perm;
+    if (!g.bf.includes(victim) || !isCreature(victim)) continue;
+    for (const card of me.hand) {
+      const pr = protectionOf(g, card, me.id);
+      if (!pr || !g.canCast(me.id, card)) continue;
+      if (permValue(g, victim) <= cardValue(g, me, card)) continue;          // not worth the card
+      if (!survives(g, victim, effect, item, pr)) continue;
+      if (!matches(card.def.spell!.effect.params.ValidTgts!, g.subjectOf(victim), { you: me.id })) continue;
+      withHint({ perm: victim }, () => g.castSpell(me.id, card));
+      return true;
+    }
+  }
+  return false;
+}
+
+function tryPunish(g: Game, me: Player, item: StackItem): boolean {
+  const boosted = (item.plan ?? []).filter(st => !isHarmful(st.effect) && ['Pump', 'PutCounter', 'Attach'].includes(st.effect.api))
+    .flatMap(st => st.targets ?? [])
+    .filter(t => t.kind === 'perm' && t.perm.controller === item.controller && isCreature(t.perm)) as { perm: Perm }[];
+  for (const { perm: target } of boosted) {
+    if (!g.bf.includes(target)) continue;
+    for (const card of me.hand) {
+      const d = card.def;
+      if (!isInstantSpeed(d) || !d.spell || d.types.includes('Creature') || !isHarmful(d.spell.effect) || d.spell.effect.api === 'Counter') continue;
+      if (!g.canCast(me.id, card)) continue;
+      const ctx: Ctx = { p: me.id, card, x: 0, kicked: false, targets: [] };
+      const s = scoreTargets(g, d.spell.effect, ctx).find(x => x.t.kind === 'perm' && x.t.perm === target)?.s ?? 0;
+      if (s < 1) continue;                                                     // can't deal with it
+      if (permValue(g, target) + cardValue(g, g.players[item.controller], item.card) < cardValue(g, me, card)) continue;
+      withHint({ perm: target }, () => g.castSpell(me.id, card));
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Called whenever `me` gets priority with something on the stack. Returns true if we responded. */
+export function respond(g: Game, me: Player, top: StackItem): boolean {
+  if (top.countered || top.controller === me.id) return false;
+  return tryCounter(g, me, top) || tryProtect(g, me, top) || tryPunish(g, me, top);
 }
 
 /** Defender may use instant-speed removal on an attacker. */

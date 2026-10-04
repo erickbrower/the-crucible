@@ -43,7 +43,7 @@ npm run sim -- trace    <deckA.txt> <deckB.txt> [--seed 1]   # play-by-play of o
 The format defaults to Brawl if the first deck has a `Commander` section, otherwise Standard.
 Run `SHOW_HANDS=1 npm run sim -- trace ...` to also print both hands each turn.
 
-Games alternate who goes first. The CI column is a 95% Wilson interval, so differences
+Games alternate who goes first. Traces show stack fights as `casts X in response to Y` and `Y fizzles`. The CI column is a 95% Wilson interval, so differences
 inside about ±5% at 300 games are noise.
 
 ## Deck files
@@ -72,7 +72,7 @@ Deck
 | Script reader | `src/cards/forge.ts` | Parses Forge `Key:Value` scripts, faces, SVars |
 | Compiler | `src/cards/compile.ts` | Turns a script into a `CardDef`: costs, abilities, triggers, statics, land info, plus coverage notes |
 | Filters | `src/engine/filters.ts` | Evaluates Forge "Valid" expressions like `Creature.OppCtrl+powerLE2` |
-| Engine | `src/engine/game.ts` | Turns, mana payment (backtracking solver), stack with one response window, triggers, static buffs, combat, state-based actions, command zone |
+| Engine | `src/engine/game.ts` | Turns, mana payment (backtracking solver), a real stack with a priority loop (targets locked on cast, fizzles, counter wars), triggers, static buffs, combat, state-based actions, command zone |
 | AI | `src/ai/policy.ts` | Heuristic play shared by both seats; deck style (aggro/midrange/control) is inferred from the list |
 | Runner / CLI | `src/sim/*.ts`, `src/cli.ts` | Deck parsing, match statistics |
 
@@ -88,8 +88,18 @@ indestructible.
 - **The AI is heuristic, not optimal.** It plays reasonably but makes mistakes a good player
   would not, especially with tempo, bluffing and complex sequencing. Treat results as
   *relative* (A/B testing deck changes against the same opponents), not as true ladder win rates.
-- Only one response per spell (an opponent can counter, but there is no deep stack interaction).
-  Instant-speed play happens in fixed windows: end of turn, when attacked, and combat tricks.
+- **Spells use a real stack, but the AI only answers in three obvious ways.** Players pass
+  priority back and forth until both pass, so responses can stack to any depth. The AI responds
+  only when it saves (or kills) something worth more than the card it spends:
+  1. *Counter it*, including countering a counterspell aimed at its own spell.
+  2. *Protect*: their removal targets our creature and a trick in hand (hexproof, indestructible
+     or enough toughness) saves it. Hexproof makes the removal fizzle.
+  3. *Punish a trick*: they pump their creature; we kill it in response and the pump fizzles.
+
+  It never holds priority, bluffs or baits. Starting a fight outside those cases (instant-speed
+  removal and tricks) still happens only in fixed windows: end of turn, when attacked, and after blocks.
+- Triggered and activated abilities resolve immediately instead of using the stack, so they
+  can't be responded to.
 - Anything listed by `coverage` is ignored or approximated. Examples: adventures and omens
   (only the creature half), Spree, Warp, Impending, flashback, graveyard-cast abilities,
   "can't be countered", most replacement effects, and conditional statics (treated as always on).

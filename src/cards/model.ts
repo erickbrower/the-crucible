@@ -93,3 +93,5 @@ export interface LandInfo {
 export const isType = (c: CardDef, t: string) => c.types.includes(t);
 export const isPermanentCard = (c: CardDef) =>
   ['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker', 'Battle'].some(t => c.types.includes(t));
+
+export const cantBeCountered = (c: CardDef) => /This spell can't be countered/i.test(c.oracle);
