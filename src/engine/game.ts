@@ -1,7 +1,7 @@
 // Two-player game engine. Rules are simplified but cover the parts of Magic that decide most
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
-import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger } from '../cards/model.js';
+import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
 import { loadToken, parseCost } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
@@ -21,7 +21,14 @@ export type Target =
   | { kind: 'card'; card: CardInst; zone: 'graveyard' | 'library' | 'hand' }
   | { kind: 'spell'; item: StackItem };
 
-export interface StackItem { card: CardInst; controller: number; x: number; kicked: boolean; countered?: boolean; fromCommand?: boolean; targets?: Target[] }
+/** One step of a spell: an effect (or a chosen Charm mode) and the targets locked in when it was cast. */
+export interface SpellStep { effect: Effect; targets?: Target[] }
+
+export interface StackItem {
+  card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
+  countered?: boolean;
+  plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
+}
 
 export interface Ctx {
   p: number;                       // controller
@@ -31,6 +38,7 @@ export interface Ctx {
   kicked: boolean;
   triggered?: { perm?: Perm | CardInst; player?: number; amount?: number; target?: Perm };
   targets: Target[];               // targets chosen for this effect (parent targets for subs)
+  preset?: Target[];               // targets locked in on cast; re-checked for legality on resolution
   sacrificedPower?: number;
   spell?: StackItem;
 }
@@ -52,7 +60,8 @@ export class Game {
   phase = 'setup';
   pendingTriggers: { trig: Trigger; perm: Perm | CardInst; controller: number; event: GEvent }[] = [];
   resolvingDepth = 0;
-  stats = { damage: [0, 0], cast: [0, 0], countered: [0, 0], commanderCasts: [0, 0], drawn: [0, 0], turnsWithVenom: [0, 0] };
+  inPriority = false;              // true while the priority loop is running (responses just push)
+  stats = { damage: [0, 0], cast: [0, 0], countered: [0, 0], fizzled: [0, 0], commanderCasts: [0, 0], drawn: [0, 0], turnsWithVenom: [0, 0] };
 
   constructor(decks: [DeckList, DeckList], opts: GameOptions) {
     this.opts = opts;
@@ -535,24 +544,91 @@ export class Game {
     const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}`, pid);
+    const under = this.stack[this.stack.length - 1];
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    // modes and targets are chosen now and stay locked in until the spell resolves
+    if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
+    AI.resetHints();
     this.stack.push(item);
     this.emit({ type: 'cast', player: pid, card: c, item });
     // prowess
     if (!isCreature) for (const perm of this.bf) if (perm.controller === pid && this.has(perm, 'Prowess')) { perm.tempP++; perm.tempT++; }
     this.resolveTriggers();
-    // response window: opponent may counter
-    if (!this.over) AI.respondToSpell(this, this.players[this.opp(pid)], item);
-    this.stack.pop();
-    if (this.over) return true;
+    if (!this.inPriority) this.settle(pid);
+    return true;
+  }
+
+  isPermanentSpell(d: CardDef) {
+    return d.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !d.types.includes('Instant') && !d.types.includes('Sorcery');
+  }
+
+  private lockTargets(eff: Effect, ctx: Ctx): SpellStep[] {
+    let steps: Effect[] = [eff];
+    if (eff.api === 'Charm') {
+      const n = eff.params.CharmNum ? Math.max(1, this.amount(eff.params.CharmNum, ctx)) : 1;
+      steps = AI.chooseCharm(this, eff, ctx).slice(0, n);
+      if (eff.sub) steps.push(eff.sub);
+    }
+    return steps.map(e => {
+      if (e.params.ValidTgts === undefined && e.params.TargetType === undefined) return { effect: e };
+      const t = AI.chooseTargets(this, e, ctx);
+      if (this.opts.trace && t.length) this.trace(`  ${ctx.card?.def.name} (${e.api}) -> ${t.map(x => this.describe(x)).join(', ')}`, ctx.p);
+      return { effect: e, targets: t };
+    });
+  }
+
+  /** Is a locked-in target still legal? (still there, still matches, no new hexproof/shroud) */
+  isLegalTarget(t: Target, eff: Effect, ctx: Ctx): boolean {
+    switch (t.kind) {
+      case 'perm': {
+        if (!this.bf.includes(t.perm)) return false;
+        const kw = this.statsOf(t.perm).keywords;
+        if (kw.includes('Shroud') || (t.perm.controller !== ctx.p && kw.includes('Hexproof'))) return false;
+        return matches(eff.params.ValidTgts ?? 'Card', this.subjectOf(t.perm), { you: ctx.p, sourceId: ctx.source?.id });
+      }
+      case 'player': return !this.players[t.pid].lost;
+      case 'card': { const o = this.players[t.card.owner]; return o.graveyard.includes(t.card) || o.hand.includes(t.card); }
+      case 'spell': return this.stack.includes(t.item) && !t.item.countered;
+    }
+  }
+
+  /**
+   * The priority loop. After a spell is cast, players alternate getting priority; each may respond
+   * (which pushes onto the stack) or pass. Two passes in a row resolve the top of the stack, and the
+   * active player gets priority again. Runs until the stack is empty.
+   */
+  settle(actor: number) {
+    if (this.inPriority) return;
+    this.inPriority = true;
+    let holder = this.opp(actor), passes = 1, guard = 0;   // the caster passes first
+    try {
+      while (this.stack.length && !this.over && guard++ < 300) {
+        const top = this.stack[this.stack.length - 1];
+        if (AI.respond(this, this.players[holder], top)) { passes = 1; holder = this.opp(holder); continue; }
+        if (++passes >= 2) { this.resolveTop(); passes = 0; holder = this.active; }
+        else holder = this.opp(holder);
+      }
+    } finally { this.inPriority = false; }
+  }
+
+  private resolveTop() {
+    const item = this.stack.pop()!;
+    const c = item.card, p = this.players[item.controller];
+    const toYard = () => { if (c.isCommander) p.command.push(c); else p.graveyard.push(c); };
     if (item.countered) {
-      this.trace(`${c.def.name} is countered`);
-      this.stats.countered[pid]++;
-      if (c.isCommander) p.command.push(c); else p.graveyard.push(c);
-      return true;
+      this.trace(`${c.def.name} is countered`, item.controller);
+      this.stats.countered[item.controller]++;
+      toYard(); return;
+    }
+    // a spell whose targets have all become illegal does nothing ("fizzles")
+    const targeted = (item.plan ?? []).filter(st => st.targets && st.targets.length);
+    const ctx: Ctx = { p: item.controller, card: c, x: item.x, kicked: item.kicked, targets: [] };
+    if (targeted.length && targeted.every(st => st.targets!.every(t => !this.isLegalTarget(t, st.effect, ctx)))) {
+      this.trace(`${c.def.name} fizzles (no legal targets)`, item.controller);
+      this.stats.fizzled[item.controller]++;
+      toYard(); return;
     }
     this.resolveSpell(item);
-    return true;
   }
 
   resolveSpell(item: StackItem) {
@@ -567,7 +643,7 @@ export class Game {
         if (host) perm.attachedTo = host.id;
       }
     } else {
-      if (c.def.spell) this.resolveEffect(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
+      for (const st of item.plan ?? []) this.resolveEffect(st.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item, preset: st.targets });
       if (c.isCommander) p.command.push(c);
       else if (!p.exile.includes(c)) p.graveyard.push(c);
     }
@@ -907,10 +983,13 @@ export class Game {
     let targets: Target[] = [];
     const needsTargets = P.ValidTgts !== undefined || P.TargetType !== undefined;
     if (needsTargets) {
-      targets = AI.chooseTargets(this, eff, ctx);
-      if (this.opts.trace && targets.length) this.trace(`  ${def?.name ?? eff.api} (${eff.api}) -> ${targets.map(t => this.describe(t)).join(', ')}`, ctx.p);
+      if (ctx.preset) targets = ctx.preset.filter(t => this.isLegalTarget(t, eff, ctx));
+      else {
+        targets = AI.chooseTargets(this, eff, ctx);
+        if (this.opts.trace && targets.length) this.trace(`  ${def?.name ?? eff.api} (${eff.api}) -> ${targets.map(t => this.describe(t)).join(', ')}`, ctx.p);
+      }
       const min = P.TargetMin !== undefined ? this.amount(P.TargetMin, ctx, def) : 1;
-      if (targets.length < min && eff.api !== 'Charm') { if (eff.sub && !P.SubAbility?.startsWith('DB')) this.resolveEffect(eff.sub, { ...ctx }, depth + 1); return; }
+      if (targets.length < min && eff.api !== 'Charm') { if (eff.sub && !P.SubAbility?.startsWith('DB')) this.resolveEffect(eff.sub, { ...ctx, preset: undefined }, depth + 1); return; }
       // ward
       for (const t of targets) {
         if (t.kind === 'perm' && t.perm.controller !== ctx.p) {
@@ -922,7 +1001,7 @@ export class Game {
         }
       }
     }
-    const sub: Ctx = { ...ctx, targets: needsTargets ? targets : ctx.targets };
+    const sub: Ctx = { ...ctx, preset: undefined, targets: needsTargets ? targets : ctx.targets };
     const defined = (key = 'Defined') => this.defined(P[key], sub);
     switch (eff.api) {
       case 'DealDamage': {
@@ -1028,7 +1107,8 @@ export class Game {
         break;
       }
       case 'Counter': {
-        for (const t of targets) if (t.kind === 'spell') {
+        for (const t of targets) if (t.kind === 'spell' && !t.item.countered) {
+          if (cantBeCountered(t.item.card.def)) { this.trace(`${t.item.card.def.name} can't be countered`, ctx.p); continue; }
           const unless = P.UnlessCost ? parseInt(P.UnlessCost, 10) : 0;
           if (unless && this.payMana(t.item.controller, unless, [], true)) { this.trace(`pays ${unless} to avoid counter`); continue; }
           t.item.countered = true;
@@ -1094,7 +1174,7 @@ export class Game {
         const choice = AI.chooseCharm(this, eff, ctx);
         const n = P.CharmNum ? this.amount(P.CharmNum, ctx, def) : 1;
         const picks = choice.slice(0, Math.max(1, n));
-        for (const c of picks) this.resolveEffect(c, { ...ctx, targets: [] }, depth + 1);
+        for (const c of picks) this.resolveEffect(c, { ...ctx, preset: undefined, targets: [] }, depth + 1);
         break;
       }
       case 'Dig': {
