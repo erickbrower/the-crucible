@@ -577,6 +577,24 @@ export class Game {
     });
   }
 
+  /** Pay a ward cost ("2", "Discard<1/Card>", "PayLife<3>"). Returns false if it can't be paid. */
+  private payWard(pid: number, cost: string): boolean {
+    const p = this.players[pid];
+    const n = parseInt(cost, 10);
+    if (!isNaN(n)) return this.payMana(pid, n, [], true);
+    let m = cost.match(/^Discard<(\d+)/);
+    if (m) {
+      const k = +m[1];
+      if (p.hand.length < k) return false;
+      for (let i = 0; i < k; i++) this.discard(p, AI.chooseDiscard(this, p));
+      this.trace(`  discards ${k} to pay ward`, pid);
+      return true;
+    }
+    m = cost.match(/^PayLife<(\d+)>/);
+    if (m) { if (p.life <= +m[1]) return false; this.loseLife(pid, +m[1]); return true; }
+    return true;   // unknown ward cost: treat as paid
+  }
+
   /** Is a locked-in target still legal? (still there, still matches, no new hexproof/shroud) */
   isLegalTarget(t: Target, eff: Effect, ctx: Ctx): boolean {
     switch (t.kind) {
@@ -995,8 +1013,7 @@ export class Game {
         if (t.kind === 'perm' && t.perm.controller !== ctx.p) {
           const wk = t.perm.def.keywords.find(k => k.startsWith('Ward:'));
           if (wk) {
-            const n = parseInt(wk.split(':')[1], 10);
-            if (!isNaN(n) && !this.payMana(ctx.p, n, [], true)) { this.trace(`ward counters ${def?.name}`); return; }
+            if (!this.payWard(ctx.p, wk.slice(5))) { this.trace(`ward counters ${def?.name}`, ctx.p); return; }
           }
         }
       }
