@@ -34,5 +34,10 @@ describe('filters', () => {
     expect(matches('Creature.nonGreen', subj(1), { you: 0 })).toBe(false);
     expect(matches('Creature.Other', subj(0), { you: 0, sourceId: 7 })).toBe(false);
     expect(matches('Player', { kind: 'player', controller: 1 }, { you: 0 })).toBe(true);
+    // subtype words as properties, including type groups like "outlaw"
+    expect(matches('Creature.!Outlaw', subj(1), { you: 0 })).toBe(true);
+    expect(matches('Creature.Bear', subj(1), { you: 0 })).toBe(true);
+    const rogue = { ...bear, subtypes: ['Human', 'Rogue'] } as CardDef;
+    expect(matches('Creature.!Outlaw', { ...subj(1), def: rogue }, { you: 0 })).toBe(false);
   });
 });

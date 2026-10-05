@@ -132,7 +132,8 @@ export class Game {
 
   takeTurn(firstTurn: boolean) {
     const a = this.players[this.active];
-    a.landsPlayed = 0; a.spellsThisTurn = 0; a.noncreatureSpellsThisTurn = 0; a.drawnThisTurn = 0; a.lifeGainedThisTurn = 0;
+    a.landsPlayed = 0; a.spellsThisTurn = 0; a.noncreatureSpellsThisTurn = 0; a.drawnThisTurn = 0;
+    for (const pl of this.players) pl.lifeGainedThisTurn = 0;
     a.attackedThisTurn = false;
     for (const pl of this.players) pl.creaturesDiedThisTurn = 0;
     for (const perm of this.bf) {
@@ -248,6 +249,7 @@ export class Game {
       for (const st of src.def.statics) {
         if (st.mode !== 'Continuous') continue;
         if (!this.staticApplies(src, st.params, perm)) continue;
+        if (!this.staticConditionMet(src, st.params)) continue;
         if (st.params.AddPower) power += this.amount(st.params.AddPower, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
         if (st.params.AddToughness) toughness += this.amount(st.params.AddToughness, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
         if (st.params.AddKeyword) st.params.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
@@ -268,6 +270,30 @@ export class Game {
     else v = 2;
     const pOnly = /power is equal/i.test(o) && !/power and toughness/i.test(o);
     return { p: v, t: pOnly ? 0 : v };
+  }
+
+  private condDepth = 0;
+  /** "As long as ..." conditions on a static: CheckSVar/SVarCompare and IsPresent/PresentCompare. */
+  staticConditionMet(src: Perm | CardInst, params: Record<string, string>, controller = (src as Perm).controller ?? src.owner): boolean {
+    if (!params.CheckSVar && !params.IsPresent) return true;
+    if (this.condDepth > 0) return true;            // avoid recursion through statsOf
+    this.condDepth++;
+    try {
+      const cmp = (v: number, spec: string | undefined, ctx: Ctx) => {
+        const m = (spec ?? 'GE1').match(/^(LE|GE|LT|GT|EQ|NE)(.+)$/);
+        if (!m) return true;
+        const rhs = /^-?\d+$/.test(m[2]) ? +m[2] : this.amount(m[2], ctx, src.def);
+        return { LE: v <= rhs, GE: v >= rhs, LT: v < rhs, GT: v > rhs, EQ: v === rhs, NE: v !== rhs }[m[1] as 'LE'];
+      };
+      const ctx: Ctx = { p: controller, source: src as Perm, x: 0, kicked: false, targets: [] };
+      if (params.CheckSVar && !cmp(this.amount(params.CheckSVar, ctx, src.def), params.SVarCompare, ctx)) return false;
+      if (params.IsPresent && (!params.PresentZone || params.PresentZone === 'Battlefield')) {
+        const fctx = { you: controller, sourceId: src.id, sourceAttachedTo: (src as Perm).attachedTo, chosenType: (src as Perm).chosenType };
+        const n = this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
+        if (!cmp(n, params.PresentCompare, ctx)) return false;
+      }
+      return true;
+    } finally { this.condDepth--; }
   }
 
   staticApplies(src: Perm, params: Record<string, string>, target: Perm): boolean {
@@ -331,6 +357,7 @@ export class Game {
     if ((m = expr.match(/^Count\$Compare .*\.(\d+)\.(\d+)$/))) return +m[2];
     if (/^Count\$xPaid/.test(expr)) return ctx.x;
     if (/^Count\$YourLifeTotal/.test(expr)) return me.life;
+    if (/^Count\$(LifeYouGainedThisTurn|YourLifeGainedThisTurn)/.test(expr)) return me.lifeGainedThisTurn;
     if (/^Count\$CardsInYourHand/.test(expr)) return me.hand.length;
     if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
       base = this.bf.filter(x => matches(m![1], this.subjectOf(x), { you: ctx.p, sourceId: ctx.source?.id })).length; rest = m[2] ?? '';
@@ -577,6 +604,24 @@ export class Game {
     });
   }
 
+  /** Pay a ward cost ("2", "Discard<1/Card>", "PayLife<3>"). Returns false if it can't be paid. */
+  private payWard(pid: number, cost: string): boolean {
+    const p = this.players[pid];
+    const n = parseInt(cost, 10);
+    if (!isNaN(n)) return this.payMana(pid, n, [], true);
+    let m = cost.match(/^Discard<(\d+)/);
+    if (m) {
+      const k = +m[1];
+      if (p.hand.length < k) return false;
+      for (let i = 0; i < k; i++) this.discard(p, AI.chooseDiscard(this, p));
+      this.trace(`  discards ${k} to pay ward`, pid);
+      return true;
+    }
+    m = cost.match(/^PayLife<(\d+)>/);
+    if (m) { if (p.life <= +m[1]) return false; this.loseLife(pid, +m[1]); return true; }
+    return true;   // unknown ward cost: treat as paid
+  }
+
   /** Is a locked-in target still legal? (still there, still matches, no new hexproof/shroud) */
   isLegalTarget(t: Target, eff: Effect, ctx: Ctx): boolean {
     switch (t.kind) {
@@ -813,7 +858,7 @@ export class Game {
       if (!def.triggers.length && !def.keywords.some(k => k.startsWith('Mobilize'))) continue;
       const controller = (src as Perm).controller ?? src.owner;
       for (const trig of def.triggers) {
-        if (this.triggerMatches(trig, src, controller, ev)) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+        if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller)) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
       }
     }
     // Mobilize keyword
@@ -995,8 +1040,7 @@ export class Game {
         if (t.kind === 'perm' && t.perm.controller !== ctx.p) {
           const wk = t.perm.def.keywords.find(k => k.startsWith('Ward:'));
           if (wk) {
-            const n = parseInt(wk.split(':')[1], 10);
-            if (!isNaN(n) && !this.payMana(ctx.p, n, [], true)) { this.trace(`ward counters ${def?.name}`); return; }
+            if (!this.payWard(ctx.p, wk.slice(5))) { this.trace(`ward counters ${def?.name}`, ctx.p); return; }
           }
         }
       }

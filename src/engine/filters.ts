@@ -56,6 +56,12 @@ function matchType(word: string, s: Subject, ctx: FilterCtx): boolean {
   return d.subtypes.includes(word) || (d.types.includes('Creature') && hasChangeling(d)) || d.supertypes.includes(word);
 }
 
+/** Forge creature-type groups (Outlaws of Thunder Junction "outlaw", the "party"). */
+const TYPE_GROUPS: Record<string, string[]> = {
+  Outlaw: ['Assassin', 'Mercenary', 'Pirate', 'Rogue', 'Warlock'],
+  Party: ['Cleric', 'Rogue', 'Warrior', 'Wizard'],
+};
+
 const hasChangeling = (d: CardDef) => d.keywords.some(k => k === 'Changeling');
 
 function matchProp(prop: string, s: Subject, ctx: FilterCtx): boolean {
@@ -104,6 +110,13 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
   }
   m = prop.match(/^with(.+)$/);
   if (m) return !!s.keywords?.includes(m[1]);
+  // a bare type or subtype word used as a property, e.g. Creature.Outlaw or Creature.!Outlaw
+  if (/^[A-Z][a-z]+$/.test(prop)) {
+    if (s.kind === 'player' || !d) return false;
+    if (prop === 'Modified') return !!(s as Subject & { modified?: boolean }).modified;
+    if (TYPE_GROUPS[prop]) return TYPE_GROUPS[prop].some(t => d.subtypes.includes(t)) || hasChangeling(d);
+    return matchType(prop, s, ctx);
+  }
   // unknown property: be lenient
   return true;
 }
