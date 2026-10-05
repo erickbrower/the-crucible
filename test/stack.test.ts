@@ -85,3 +85,26 @@ d('the stack', () => {
     expect(g.players[1].hand.map(c => c.def.name)).toContain('Negate');
   });
 });
+
+d('conditional statics', () => {
+  it('Twinblade Paladin has double strike only at 25+ life', () => {
+    const g = setup({ hand: [], bf: ['Twinblade Paladin'] }, { hand: [], bf: [] });
+    const pal = g.bf.find(x => x.def.name === 'Twinblade Paladin')!;
+    g.players[0].life = 20;
+    expect(g.statsOf(pal).keywords).not.toContain('Double Strike');
+    g.players[0].life = 25;
+    expect(g.statsOf(pal).keywords).toContain('Double Strike');
+  });
+});
+
+d('intervening-if triggers', () => {
+  it('Resplendent Angel makes an Angel only after 5+ life gained this turn', () => {
+    const g = setup({ hand: [], bf: ['Resplendent Angel'] }, { hand: [], bf: [] });
+    const angels = () => g.bf.filter(x => x.token && x.controller === 0).length;
+    g.emit({ type: 'phase', phase: 'End of Turn', player: 0 });
+    expect(angels()).toBe(0);
+    g.gainLife(0, 5);
+    g.emit({ type: 'phase', phase: 'End of Turn', player: 0 });
+    expect(angels()).toBe(1);
+  });
+});

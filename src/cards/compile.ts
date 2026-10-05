@@ -200,7 +200,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     statics.push({ mode: params.Mode, params });
     const m = params.Mode;
     if (m === 'Continuous') {
-      if (params.CheckSVar || params.IsPresent) notes.push('conditional static treated as always on');
+      if (params.IsPresent && params.PresentZone && params.PresentZone !== 'Battlefield') notes.push('conditional static treated as always on');
       if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack'].includes(m)) {
