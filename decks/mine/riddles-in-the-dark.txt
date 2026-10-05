@@ -6,7 +6,7 @@ Deck
 1 Sunset Saboteur
 1 Bloodghast
 4 Desolation Prowler
-3 Gollum, Riddle Master
+4 Gollum, Riddle Master
 2 Preacher of the Schism
 2 Vampire Nighthawk
 1 Midnight Reaper
@@ -18,4 +18,3 @@ Deck
 2 Requiting Hex
 2 Hero's Downfall
 2 Murder
-1 Moment of Craving
