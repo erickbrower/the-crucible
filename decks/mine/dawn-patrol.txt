@@ -1,10 +1,9 @@
 Deck
 4 Healer's Hawk
-3 Leonin Vanguard
+2 Leonin Vanguard
 1 Liliana the Faultless
 1 Brightblade Stoat
 4 Ajani's Pridemate
-1 Unflinching Hortimancer
 2 Enlightened Confidant
 4 Inspiring Overseer
 4 Angel of Vitality
@@ -16,3 +15,4 @@ Deck
 2 Stasis Snare
 3 Banishing Light
 21 Plains
+2 Haliya, Guided by Light

@@ -111,7 +111,8 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
     const sv = face.svars[params.SubAbility];
     if (sv) eff.sub = compileEffect(face, sv, notes, depth + 1);
   }
-  if (params.Conditions || params.ConditionCheckSVar || params.ConditionPresent || params.ConditionDefined) {
+  // ConditionCheckSVar is evaluated by the engine; the others are not
+  if (params.Conditions || params.ConditionPresent || params.ConditionDefined) {
     if (!params.ETB) notes.push(`condition on ${api} ignored`);
   }
   return eff;
