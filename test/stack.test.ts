@@ -108,3 +108,16 @@ d('intervening-if triggers', () => {
     expect(angels()).toBe(1);
   });
 });
+
+d('trigger limits', () => {
+  it('Cat Collector makes one Cat, only on the first life gain of its own turn', () => {
+    const g = setup({ hand: [], bf: ['Cat Collector'] }, { hand: [], bf: [] });
+    const cats = () => g.bf.filter(x => x.token && x.def.subtypes.includes('Cat')).length;
+    g.gainLife(0, 1); g.gainLife(0, 1); g.gainLife(0, 2);
+    expect(cats()).toBe(1);
+    g.active = 1;
+    for (const pl of g.players) pl.lifeGainedThisTurn = 0;
+    g.gainLife(0, 1);
+    expect(cats()).toBe(1);   // not on the opponent's turn
+  });
+});

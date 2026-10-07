@@ -581,7 +581,7 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
         score = effectScore(g, ab.effect, ctx);
         if (ab.planeswalker) {
           const loyaltyAfter = (perm.counters.LOYALTY ?? 0) + (ab.cost.loyalty ?? 0);
-          if (ab.ultimate) score += 10;
+          if (ab.ultimate && score > 0) score += 10;   // only when it actually does something
           if ((ab.cost.loyalty ?? 0) > 0) score += 1.5;
           if (loyaltyAfter <= 1 && (ab.cost.loyalty ?? 0) < 0) score -= 2;
         }
