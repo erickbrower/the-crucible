@@ -858,7 +858,8 @@ export class Game {
       if (!def.triggers.length && !def.keywords.some(k => k.startsWith('Mobilize'))) continue;
       const controller = (src as Perm).controller ?? src.owner;
       for (const trig of def.triggers) {
-        if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller)) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+        if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev))
+          this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
       }
     }
     // Mobilize keyword
@@ -873,6 +874,23 @@ export class Game {
       }
     }
     if (!this.resolvingDepth) this.resolveTriggers();
+  }
+
+  private triggerCounts = new Map<string, number>();
+  /** "Only during your turn", "the first time each turn", "only once each turn". */
+  private triggerLimitsOk(trig: Trigger, src: Perm | CardInst, controller: number, ev: GEvent): boolean {
+    const P = trig.params;
+    if (P.PlayerTurn === 'True' && this.active !== controller) return false;
+    if (P.PlayerTurn === 'False' && this.active === controller) return false;
+    if (P.FirstTime === 'True' && ev.type === 'lifeGained' && this.players[ev.player].lifeGainedThisTurn !== ev.amount) return false;
+    const lim = P.ActivationLimit ? parseInt(P.ActivationLimit, 10) : NaN;
+    if (!isNaN(lim)) {
+      const key = `${this.turn}:${this.active}:${src.id}:${src.def.triggers.indexOf(trig)}`;
+      const n = this.triggerCounts.get(key) ?? 0;
+      if (n >= lim) return false;
+      this.triggerCounts.set(key, n + 1);
+    }
+    return true;
   }
 
   private triggerMatches(trig: Trigger, src: Perm | CardInst, controller: number, ev: GEvent): boolean {
