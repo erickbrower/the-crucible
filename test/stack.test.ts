@@ -109,6 +109,26 @@ d('intervening-if triggers', () => {
   });
 });
 
+d('sagas', () => {
+  it('Huatli exiles and returns as Roar of the Fifth People, which runs one chapter per turn', () => {
+    const g = setup({ hand: [], bf: ['Huatli, Poet of Unity'] }, { hand: [], bf: [] });
+    g.players[0].library.push({ id: g.nextId++, def: loadCard('Regal Imperiosaur'), owner: 0 });
+    const huatli = g.bf.find(x => x.def.name === 'Huatli, Poet of Unity')!;
+    g.resolveEffect(huatli.def.abilities.find(a => a.kind === 'activated')!.effect, { p: 0, source: huatli, x: 0, kicked: false, targets: [] });
+    const saga = () => g.bf.find(x => x.def.name === 'Roar of the Fifth People');
+    const dinoTokens = () => g.bf.filter(x => x.token && x.def.subtypes.includes('Dinosaur')).length;
+    expect(onBf(g, 0, 'Huatli, Poet of Unity')).toBe(false);
+    expect(saga()?.counters.LORE).toBe(1);
+    expect(dinoTokens()).toBe(2);                       // I: two 3/3 Dinosaurs
+    g.addLore(saga()!);                                 // II
+    g.addLore(saga()!);                                 // III: tutor a Dinosaur
+    expect(g.players[0].hand.map(c => c.def.name)).toContain('Regal Imperiosaur');
+    g.addLore(saga()!);                                 // IV: double strike, then sacrificed
+    expect(saga()).toBeUndefined();
+    expect(inYard(g, 0, 'Huatli, Poet of Unity')).toBe(true);   // returns to its front face
+  });
+});
+
 d('trigger limits', () => {
   it('Cat Collector makes one Cat, only on the first life gain of its own turn', () => {
     const g = setup({ hand: [], bf: ['Cat Collector'] }, { hand: [], bf: [] });

@@ -81,6 +81,7 @@ export interface CardDef {
   kicker?: ManaCost;
   altAdditional?: { sac: string; orMana: ManaCost };  // e.g. Eaten Alive
   affinity?: string;      // cost reduction per permanent of this type
+  chapters?: Effect[];    // Saga chapter abilities, in order (I, II, III ...)
 }
 
 export interface LandInfo {
