@@ -569,7 +569,7 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
       if (!costPayable(g, p, perm, ab)) return;
       const ctx: Ctx = { p: p.id, source: perm, x: 0, kicked: false, targets: [] };
       let score: number;
-      if (ab.effect.api === 'SetState') {
+      if (ab.effect.api === 'SetState' || ab.effect.sub?.params.Transformed === 'True') {
         if (!perm.def.back || perm.transformed) return;
         score = 6;
       } else if (ab.effect.api === 'Attach') {

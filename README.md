@@ -79,7 +79,7 @@ Deck
 Supported effects include damage, destroy, exile (including "until this leaves"), bounce,
 draw, discard, tokens, pumps, ±1/±1 counters, fight, counterspells (with "unless pays"),
 scry/surveil, mill, sacrifice, tap/untap, auras and equipment, modal spells, transform, explore,
-investigate, amass, connive, ward, prowess and mobilize. Combat handles flying, reach,
+investigate, amass, connive, ward, prowess, mobilize and sagas. Combat handles flying, reach,
 first and double strike, deathtouch, trample, lifelink, menace, vigilance, defender and
 indestructible.
 

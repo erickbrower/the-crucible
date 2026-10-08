@@ -148,6 +148,8 @@ export class Game {
     if (!firstTurn) this.draw(this.active, 1);
     if (this.over) return;
     this.phase = 'main1';
+    // Sagas get a lore counter after the draw step (precombat main)
+    for (const s of this.bf.filter(x => x.controller === this.active && x.def.chapters)) { this.addLore(s); if (this.over) return; }
     this.emit({ type: 'phase', phase: 'Main1', player: this.active });
     AI.mainPhase(this, a, 1);
     if (this.over) return;
@@ -721,7 +723,21 @@ export class Game {
       for (const d of dup) this.leave(d, 'graveyard');
     }
     this.emit({ type: 'zone', perm, from: 'Any', to: 'Battlefield' });
+    if (c.def.chapters && this.bf.includes(perm)) this.addLore(perm);
     return perm;
+  }
+
+  /** Put a lore counter on a Saga, run that chapter, and sacrifice it after its last chapter. */
+  addLore(perm: Perm) {
+    const ch = perm.def.chapters;
+    if (!ch) return;
+    const n = (perm.counters.LORE ?? 0) + 1;
+    perm.counters.LORE = n;
+    this.trace(`${perm.def.name} chapter ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'][n - 1] ?? n}`, perm.controller);
+    const eff = ch[n - 1];
+    if (eff?.api) this.resolveEffect(eff, { p: perm.controller, source: perm, x: 0, kicked: false, targets: [] });
+    this.checkSBA();
+    if (n >= ch.length && this.bf.includes(perm)) this.leave(perm, 'graveyard', { sacrificed: true });
   }
 
   leave(perm: Perm, to: 'graveyard' | 'exile' | 'hand' | 'library' | 'librarybottom', opts: { sacrificed?: boolean } = {}) {
@@ -1361,6 +1377,20 @@ export class Game {
     const origin = P.Origin ?? 'Battlefield';
     const dest = P.Destination ?? 'Hand';
     const pl = this.players[ctx.p];
+    if (origin === 'Battlefield' && dest === 'Exile' && !P.Defined && !tg.length && eff.sub?.params.Transformed === 'True'
+      && ctx.source?.def.back && this.bf.includes(ctx.source)) {
+      // "Exile X, then return it to the battlefield transformed": a new object with the back face
+      const perm = ctx.source, front = perm.def;
+      this.bf.splice(this.bf.indexOf(perm), 1);
+      for (const a of this.bf.filter(x => x.attachedTo === perm.id)) {
+        if (a.def.subtypes.includes('Equipment')) a.attachedTo = undefined; else this.leave(a, 'graveyard');
+      }
+      this.trace(`exiles ${front.name} and returns it transformed into ${front.back!.name}`, perm.controller);
+      const np = this.enter({ id: perm.id, def: front.back!, owner: perm.owner, isCommander: perm.isCommander }, perm.controller, {});
+      np.transformed = true;
+      (np as Perm & { frontDef?: CardDef }).frontDef = front;
+      return;
+    }
     const destKey = dest === 'Exile' ? 'exile' : dest === 'Hand' ? 'hand' : dest === 'Graveyard' ? 'graveyard' : dest === 'Library' ? (P.LibraryPosition === '-1' ? 'librarybottom' : 'library') : 'battlefield';
     if (origin.includes('Battlefield') && tg.length) {
       for (const t of tg) {

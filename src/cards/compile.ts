@@ -23,7 +23,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -155,11 +155,16 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   }
   const keywords: string[] = [];
   let kicker: ManaCost | undefined, affinity: string | undefined, altAdditional: CardDef['altAdditional'];
+  let chapters: Effect[] | undefined;
   for (const k of face.all('K')) {
     const base = k.split(':')[0];
     keywords.push(k);
     if (base === 'Kicker') kicker = parseManaCost(k.split(':')[1]);
     if (base === 'Affinity') affinity = k.split(':')[1];
+    if (base === 'Chapter') {
+      // K:Chapter:4:DBA,DBB,DBC,DBD - one SVar per chapter
+      chapters = k.split(':')[2].split(',').map(n => compileEffect(face, face.svars[n.trim()] ?? '', notes));
+    }
     if (base === 'AlternateAdditionalCost') {
       const parts = k.split(':');
       const sac = parts[1].match(/Sac<\d+\/([^/>]+)/)?.[1] ?? 'Creature';
@@ -220,7 +225,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     colors: colorsOf(face, cost), power, toughness, ptStar,
     loyalty: face.get('Loyalty') ? parseInt(face.get('Loyalty')!, 10) || 0 : undefined,
     keywords, spell, abilities, triggers, statics, replacements, svars: face.svars,
-    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, affinity, altAdditional,
+    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, affinity, altAdditional, chapters,
   };
   if (types.includes('Land')) def.land = compileLand(face, abilities, subtypes);
   if (opts.token) def.notes = notes;
