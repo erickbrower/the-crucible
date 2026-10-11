@@ -16,6 +16,7 @@ export interface Subject {
   attachedTo?: number;
   keywords?: string[];
   zone?: string;
+  counters?: Record<string, number>;
 }
 
 export interface FilterCtx {
@@ -108,6 +109,9 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     const v = m[1] === 'power' ? (s.power ?? d?.power ?? 0) : m[1] === 'toughness' ? (s.toughness ?? d?.toughness ?? 0) : (d?.mv ?? 0);
     return cmp(m[2], v, +m[3]);
   }
+  // counters_GE1_P1P1, counters_EQ0_M1M1, counters_GE10_CHARGE
+  m = prop.match(/^counters_(LE|GE|LT|GT|EQ|NE)(\d+)_(\w+)$/);
+  if (m) return cmp(m[1], s.counters?.[m[3]] ?? 0, +m[2]);
   m = prop.match(/^with(.+)$/);
   if (m) return !!s.keywords?.includes(m[1]);
   // a bare type or subtype word used as a property, e.g. Creature.Outlaw or Creature.!Outlaw

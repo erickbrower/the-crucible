@@ -234,7 +234,7 @@ export class Game {
       return {
         kind: 'card', def: perm.def, controller: perm.controller, owner: perm.owner, token: perm.token, id: perm.id,
         tapped: perm.tapped, attacking: perm.attacking, blocking: perm.blocking, power: st.power, toughness: st.toughness,
-        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield',
+        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters,
       };
     }
     return { kind: 'card', def: x.def, controller: controller ?? (x as Perm).controller ?? x.owner, owner: x.owner, token: x.token, id: x.id,
@@ -322,7 +322,7 @@ export class Game {
     const subj: Subject = {
       kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
       tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
-      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords,
+      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords, counters: target.counters,
     };
     return matches(params.Affected, subj, this.ctxFor(src));
   }
@@ -922,6 +922,7 @@ export class Game {
 
   dealDamage(source: Perm | CardInst | undefined, controller: number, target: Target, amount: number, combat: boolean) {
     if (amount <= 0) return 0;
+    if (!this.inCombatDamage) this.damageBatch++;
     // noncombat damage modifiers (Tomik, Twinflame Tyrant style)
     if (!combat) {
       const hitsOpp = (target.kind === 'player' && target.pid !== controller) || (target.kind === 'perm' && target.perm.controller !== controller);
@@ -1021,12 +1022,22 @@ export class Game {
   }
 
   private triggerCounts = new Map<string, number>();
+  damageBatch = 0;                 // combat damage step (or one noncombat damage event): "one or more ... deal damage" triggers once per batch
+  private inCombatDamage = false;
+  private onceFired = new Set<string>();
   /** "Only during your turn", "the first time each turn", "only once each turn". */
   private triggerLimitsOk(trig: Trigger, src: Perm | CardInst, controller: number, ev: GEvent): boolean {
     const P = trig.params;
     if (P.PlayerTurn === 'True' && this.active !== controller) return false;
     if (P.PlayerTurn === 'False' && this.active === controller) return false;
     if (P.FirstTime === 'True' && ev.type === 'lifeGained' && this.players[ev.player].lifeGainedThisTurn !== ev.amount) return false;
+    if (trig.mode === 'DamageDoneOnce') {
+      const key = `${this.damageBatch}:${ev.type}:${src.id}:${src.def.triggers.indexOf(trig)}`;
+      if (ev.type === 'damage') {
+        if (this.onceFired.has(key)) return false;
+        this.onceFired.add(key);
+      }
+    }
     const lim = P.ActivationLimit ? parseInt(P.ActivationLimit, 10) : NaN;
     if (!isNaN(lim)) {
       const key = `${this.turn}:${this.active}:${src.id}:${src.def.triggers.indexOf(trig)}`;
@@ -1697,11 +1708,15 @@ export class Game {
         if (p > 0) dmgEvents.push([b, { kind: 'perm', perm: a }, p]);
       }
     }
-    for (const [src, t, n] of dmgEvents) {
-      if (this.over) return;
-      if (t.kind === 'perm' && !this.bf.includes(t.perm)) continue;
-      this.dealDamage(src, src.controller, t, n, true);
-    }
+    this.damageBatch++;
+    this.inCombatDamage = true;
+    try {
+      for (const [src, t, n] of dmgEvents) {
+        if (this.over) return;
+        if (t.kind === 'perm' && !this.bf.includes(t.perm)) continue;
+        this.dealDamage(src, src.controller, t, n, true);
+      }
+    } finally { this.inCombatDamage = false; }
     this.checkSBA();
   }
 }
