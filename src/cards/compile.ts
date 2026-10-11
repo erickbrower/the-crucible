@@ -23,7 +23,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -206,7 +206,6 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     statics.push({ mode: params.Mode, params });
     const m = params.Mode;
     if (m === 'Continuous') {
-      if (params.IsPresent && params.PresentZone && params.PresentZone !== 'Battlefield') notes.push('conditional static treated as always on');
       if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {

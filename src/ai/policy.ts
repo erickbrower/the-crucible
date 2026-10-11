@@ -636,6 +636,28 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
   });
 }
 
+/** Use mana that only lasts until end of combat (firebending): instants, flash and instant-speed abilities. */
+export function spendFloatingMana(g: Game, p: Player) {
+  runActions(g, p, () => {
+    if (!p.pool?.length) return [];
+    const acts: Action[] = [];
+    for (const card of p.hand) {
+      const plan = planSpell(g, p, card, false, 'instant');
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
+    acts.push(...abilityActions(g, p, 'instant'));
+    return acts;
+  });
+}
+
+/** Earthbend target: stack onto a land that's already a creature, else an untapped basic (it has haste and can attack). */
+export function chooseEarthbendLand(g: Game, pid: number): Perm | undefined {
+  const lands = g.bf.filter(x => x.controller === pid && x.def.types.includes('Land'));
+  return lands.find(x => x.earthbent)
+    ?? lands.filter(x => !x.tapped).sort((a, b) => Number(b.def.supertypes.includes('Basic')) - Number(a.def.supertypes.includes('Basic')))[0]
+    ?? lands[0];
+}
+
 /** The non-active player's chance to use instants, flash and abilities at the end of the opponent's turn. */
 export function endOfTurnWindow(g: Game, p: Player) {
   runActions(g, p, () => {

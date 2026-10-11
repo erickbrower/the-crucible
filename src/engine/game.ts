@@ -43,7 +43,7 @@ export interface Ctx {
   spell?: StackItem;
 }
 
-interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean }
+interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number }
 
 export class Game {
   players: [Player, Player];
@@ -174,6 +174,7 @@ export class Game {
   }
 
   cleanup() {
+    for (const pl of this.players) pl.pool = [];
     for (const perm of this.bf) {
       perm.damage = 0; perm.deathtouched = false; perm.tempP = 0; perm.tempT = 0; perm.tempKw = [];
       perm.attacking = false; perm.blocking = false;
@@ -289,9 +290,16 @@ export class Game {
       };
       const ctx: Ctx = { p: controller, source: src as Perm, x: 0, kicked: false, targets: [] };
       if (params.CheckSVar && !cmp(this.amount(params.CheckSVar, ctx, src.def), params.SVarCompare, ctx)) return false;
-      if (params.IsPresent && (!params.PresentZone || params.PresentZone === 'Battlefield')) {
+      if (params.IsPresent) {
         const fctx = { you: controller, sourceId: src.id, sourceAttachedTo: (src as Perm).attachedTo, chosenType: (src as Perm).chosenType };
-        const n = this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
+        let n = 0;
+        for (const zone of (params.PresentZone ?? 'Battlefield').split(',')) {
+          if (zone === 'Battlefield') n += this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
+          else {
+            const key = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile', Library: 'library' } as Record<string, 'graveyard'>)[zone];
+            if (key) for (const pl of this.players) n += pl[key].filter(c => matches(params.IsPresent, this.subjectOf(c, pl.id), fctx)).length;
+          }
+        }
         if (!cmp(n, params.PresentCompare, ctx)) return false;
       }
       return true;
@@ -328,6 +336,18 @@ export class Game {
     if (this.has(perm, 'Unblockable') || this.has(perm, "Can't be blocked")) return true;
     return perm.def.statics.some(s => s.mode === 'CantBlockBy' && (s.params.ValidAttacker ?? '').includes('Self') && !s.params.ValidBlocker);
   }
+  /** Total firebending N on a creature, printed or granted by a static ("has firebending 2 as long as ..."). */
+  firebending(perm: Perm) {
+    const val = (k: string) => k.startsWith('Firebending') ? (parseInt(k.split(':')[1] ?? '1', 10) || 1) : 0;
+    let n = perm.def.keywords.reduce((a, k) => a + val(k), 0);
+    for (const src of this.bf) for (const st of src.def.statics) {
+      if (st.mode !== 'Continuous' || !st.params.AddKeyword?.includes('Firebending')) continue;
+      if (!this.staticApplies(src, st.params, perm) || !this.staticConditionMet(src, st.params)) continue;
+      n += st.params.AddKeyword.split(' & ').reduce((a, k) => a + val(k), 0);
+    }
+    return n;
+  }
+
   /** Fewest creatures that can block this attacker (menace = 2, "except by three or more" = 3). */
   minBlockers(perm: Perm) {
     let n = this.has(perm, 'Menace') ? 2 : 1;
@@ -425,6 +445,7 @@ export class Game {
     const units: ManaUnit[] = [];
     let g = 0;
     const p = this.players[pid];
+    (p.pool ?? []).forEach((c, i) => units.push({ group: g++, colors: [c], land: false, treasure: false, any: false, poolIdx: i }));
     for (const perm of this.bf) {
       if (perm.controller !== pid || perm.tapped) continue;
       const d = perm.def;
@@ -472,8 +493,8 @@ export class Game {
     // order: lands with fewest colors first, then dorks, treasures last
     const order = units.map((u, i) => i).sort((a, b) => {
       const ua = units[a], ub = units[b];
-      const sa = (ua.treasure ? 100 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
-      const sb = (ub.treasure ? 100 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
+      const sa = (ua.poolIdx !== undefined ? -100 : 0) + (ua.treasure ? 100 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
+      const sb = (ub.poolIdx !== undefined ? -100 : 0) + (ub.treasure ? 100 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
       return sa - sb;
     });
     const used = new Set<number>();
@@ -504,6 +525,8 @@ export class Game {
       const chosen = [...used, ...rest.slice(0, need)];
       const groups = new Set(chosen.map(i => units[i].group));
       const done = new Set<Perm>();
+      const spentPool = chosen.map(i => units[i].poolIdx).filter((x): x is number => x !== undefined);
+      if (spentPool.length) p.pool = (p.pool ?? []).filter((_, i) => !spentPool.includes(i));
       for (const i of chosen) {
         const u = units[i];
         if (!u.perm || done.has(u.perm) || !groups.has(u.group)) continue;
@@ -789,6 +812,11 @@ export class Game {
       else owner.library.unshift(card);
     }
     if (wasCreature && to === 'graveyard') this.players[perm.controller].creaturesDiedThisTurn++;
+    if (perm.earthbent && !perm.token && (dest === 'graveyard' || dest === 'exile')) {
+      const zone = dest === 'graveyard' ? owner.graveyard : owner.exile;
+      const k = zone.findIndex(c => c.id === perm.id);
+      if (k >= 0) { const [c] = zone.splice(k, 1); this.enter(c, perm.owner, { tapped: true }); this.trace(`${c.def.name} returns to the battlefield tapped`, perm.owner); }
+    }
     if (opts.sacrificed) this.emit({ type: 'sacrificed', perm: snapshot });
     this.emit({ type: 'zone', perm: snapshot, from: 'Battlefield', to: to === 'graveyard' ? 'Graveyard' : to === 'exile' ? 'Exile' : to === 'hand' ? 'Hand' : 'Library' });
   }
@@ -895,6 +923,15 @@ export class Game {
       for (const trig of def.triggers) {
         if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev))
           this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+      }
+    }
+    // Firebending N: add {R} N times, until end of combat
+    if (ev.type === 'attacks') {
+      const n = this.firebending(ev.perm);
+      if (n) {
+        const pl = this.players[ev.perm.controller];
+        pl.pool = [...(pl.pool ?? []), ...Array<Color>(n).fill('R')];
+        this.trace(`${ev.perm.def.name} firebends: adds ${'{R}'.repeat(n)}`, ev.perm.controller);
       }
     }
     // Mobilize keyword
@@ -1332,9 +1369,17 @@ export class Game {
         break;
       }
       case 'Earthbend': {
+        // Target land you control becomes a 0/0 creature with haste that's still a land, with N +1/+1 counters.
         const n = this.amount(P.Num ?? '1', sub, def);
-        const t = this.makeToken('c_0_0_a_elemental', ctx.p);
-        this.addCounters(t, 'P1P1', n); t.sick = false;
+        const land = AI.chooseEarthbendLand(this, ctx.p);
+        if (!land) break;
+        if (!land.earthbent) {
+          (land as Perm & { frontDef?: CardDef }).frontDef ??= land.def;
+          land.def = { ...land.def, types: [...land.def.types, 'Creature'], power: 0, toughness: 0, keywords: [...land.def.keywords, 'Haste'] };
+          land.earthbent = true;
+        }
+        this.addCounters(land, 'P1P1', n);
+        this.trace(`earthbends ${land.def.name} (+${n})`, ctx.p);
         break;
       }
       default: break; // unsupported / ignored effects are reported by the coverage tool
@@ -1481,6 +1526,7 @@ export class Game {
     this.emit({ type: 'attackersDeclared', player: ap, attackers });
     for (const a of attackers) { if (this.bf.includes(a)) this.emit({ type: 'attacks', perm: a }); }
     if (this.over) return;
+    if (this.players[ap].pool?.length) AI.spendFloatingMana(this, this.players[ap]);
     // tokens created attacking join the attack
     const allAttackers = this.bf.filter(x => x.attacking && x.controller === ap);
     // defender may use instant-speed removal on attackers
@@ -1491,6 +1537,7 @@ export class Game {
     if (this.opts.trace && blocks.size) this.trace(`  blocks: ${[...blocks].map(([a, bs]) => `${bs.map(b => b.def.name).join('+')} on ${a.def.name}`).join('; ')}`);
     AI.combatTricks(this, this.players[ap], this.players[dp], live, blocks);
     this.resolveCombatDamage(live, blocks);
+    for (const pl of this.players) pl.pool = [];   // mana empties at end of combat
   }
 
   /** First-strike damage step (if anyone has it), then regular damage. */

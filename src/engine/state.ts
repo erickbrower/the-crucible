@@ -30,6 +30,7 @@ export interface Perm extends CardInst {
   loyaltyUsedTurn?: number;
   chosenType?: string;
   noUntap?: boolean;
+  earthbent?: boolean;      // a land turned into a creature by earthbend: returns to play tapped when it dies
 }
 
 export interface DeckList {
@@ -58,6 +59,7 @@ export interface Player {
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;
+  pool?: Color[];           // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }
 
