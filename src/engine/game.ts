@@ -832,6 +832,11 @@ export class Game {
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
       const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {}, { giftPromised: item.gift });
       if (item.warp) perm.warped = true;
+      if (item.kicked && c.def.offspring) {
+        // Offspring: a 1/1 token copy
+        this.enter({ id: this.nextId++, def: { ...c.def, power: 1, toughness: 1 }, owner: pid, token: true }, pid, { token: true });
+        this.trace(`offspring: creates a 1/1 copy of ${c.def.name}`, pid);
+      }
       if (c.def.keywords.some(k => k.startsWith('Enchant'))) {
         const host = AI.chooseAuraHost(this, perm);
         if (host) perm.attachedTo = host.id; else this.leave(perm, 'graveyard');

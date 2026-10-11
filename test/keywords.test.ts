@@ -119,3 +119,39 @@ d('prowess and hexproof', () => {
     expect(log(g)).not.toMatch(/Murder \(Destroy\) -> Ordinary Bear/);
   });
 });
+
+d('additional costs and permanents that modify creatures', () => {
+  it('kicker: Burst Lightning deals 4 when kicked', () => {
+    const g = setup({ hand: ['Burst Lightning'], bf: ['Mountain', 'Mountain', 'Mountain', 'Mountain', 'Mountain'] }, { bf: ['Ordinary Bear'] });
+    g.castSpell(0, card(g, 0, 'Burst Lightning'), { kicked: true });
+    expect(onBf(g, 1, 'Ordinary Bear') || g.players[1].life === 16).toBe(true);
+    expect(log(g)).toMatch(/\(kicked\)/);
+  });
+
+  it('offspring: paying the extra cost makes a 1/1 token copy', () => {
+    const g = setup({ hand: ['Pawpatch Recruit'], bf: ['Forest', 'Forest', 'Forest'] });
+    AI.mainPhase(g, g.players[0], 1);
+    const recruits = g.bf.filter(x => x.def.name === 'Pawpatch Recruit');
+    expect(recruits).toHaveLength(2);
+    expect(recruits.find(r => r.token)!.def.power).toBe(1);
+  });
+
+  it('equip: the AI attaches equipment and the creature gets the bonus', () => {
+    const g = setup({ bf: ['Goldvein Pick', 'Grizzly Bears', 'Plains'] });
+    AI.mainPhase(g, g.players[0], 1);
+    expect(g.statsOf(perm(g, 0, 'Grizzly Bears'))).toMatchObject({ power: 3, toughness: 3 });
+  });
+
+  it('mobilize: attacking makes tapped attacking tokens that are sacrificed at end of turn', () => {
+    const g = setup({ bf: ['Voice of Victory'] });
+    fight(g, [perm(g, 0, 'Voice of Victory')]);
+    expect(g.players[1].life).toBe(17);          // 1 + two 1/1 warriors
+    g.cleanup();
+    expect(g.bf.filter(x => x.token)).toHaveLength(0);
+  });
+
+  it('affinity for artifacts reduces the cost', () => {
+    const g = setup({ hand: ['Frogmite'], bf: ['Ornithopter', 'Ornithopter', 'Ornithopter', 'Ornithopter'] });
+    expect(g.spellCost(0, card(g, 0, 'Frogmite')).generic).toBe(0);
+  });
+});

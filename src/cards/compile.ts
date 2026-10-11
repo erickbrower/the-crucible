@@ -156,10 +156,12 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   const keywords: string[] = [];
   let kicker: ManaCost | undefined, affinity: string | undefined, altAdditional: CardDef['altAdditional'];
   let chapters: Effect[] | undefined;
+  let offspring: boolean | undefined;
   for (const k of face.all('K')) {
     const base = k.split(':')[0];
     keywords.push(k);
     if (base === 'Kicker') kicker = parseManaCost(k.split(':')[1]);
+    if (base === 'Offspring') { kicker = parseManaCost(k.split(':')[1]); offspring = true; }
     if (base === 'Affinity') affinity = k.split(':')[1];
     if (base === 'Chapter') {
       // K:Chapter:4:DBA,DBB,DBC,DBD - one SVar per chapter
@@ -190,6 +192,13 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
         description: params.SpellDescription,
       });
     }
+  }
+  // Equip N (keyword form): a sorcery-speed "attach to target creature you control" ability
+  for (const k of face.all('K').filter(k => k.startsWith('Equip:'))) {
+    const [, cost, valid] = k.split(':');
+    const c = parseCost(cost);
+    if (!c.supported) { notes.push(`equip cost "${cost}" ignored`); continue; }
+    abilities.push({ kind: 'activated', effect: { api: 'Attach', params: { ValidTgts: valid ?? 'Creature.YouCtrl' } }, cost: c, sorcerySpeed: true, description: `Equip ${cost}` });
   }
   const triggers: Trigger[] = [];
   for (const t of face.all('T')) {
@@ -242,7 +251,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     colors: colorsOf(face, cost), power, toughness, ptStar,
     loyalty: face.get('Loyalty') ? parseInt(face.get('Loyalty')!, 10) || 0 : undefined,
     keywords, spell, abilities, triggers, statics, replacements, svars: face.svars,
-    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, affinity, altAdditional, chapters,
+    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, offspring, affinity, altAdditional, chapters,
   };
   if (types.includes('Land')) def.land = compileLand(face, abilities, subtypes);
   if (opts.token) def.notes = notes;

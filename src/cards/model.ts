@@ -80,6 +80,7 @@ export interface CardDef {
   notes: string[];        // coverage notes: things the engine ignores or approximates
   back?: CardDef;         // transformed face (SetState Transform)
   kicker?: ManaCost;
+  offspring?: boolean;    // the kicker is an offspring cost: a 1/1 token copy enters too
   altAdditional?: { sac: string; orMana: ManaCost };  // e.g. Eaten Alive
   affinity?: string;      // cost reduction per permanent of this type
   chapters?: Effect[];    // Saga chapter abilities, in order (I, II, III ...)

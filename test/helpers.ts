@@ -42,5 +42,6 @@ export function fight(g: Game, attackers: Perm[], blocks: [Perm, Perm[]][] = [])
   for (const a of attackers) if (g.bf.includes(a)) g.emit({ type: 'attacks', perm: a });
   const m = new Map(blocks);
   for (const [, bs] of m) for (const b of bs) b.blocking = true;
-  g.resolveCombatDamage(attackers.filter(a => g.bf.includes(a)), m);
+  // tokens created tapped and attacking (mobilize) join in
+  g.resolveCombatDamage(g.bf.filter(x => x.attacking && x.controller === g.active), m);
 }
