@@ -436,12 +436,21 @@ export function chooseAuraHost(g: Game, perm: Perm): Perm | undefined {
   return auraHostFor(g, perm.def, perm.controller, perm.id);
 }
 
-interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm }
+interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm; flashback?: boolean }
 
-function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, window: 'main1' | 'main2' | 'instant'): Plan | undefined {
+function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, window: 'main1' | 'main2' | 'instant', flashback = false): Plan | undefined {
   const d = card.def;
   if (isLandCard(card)) return undefined;
   if (window === 'instant' && !isInstantSpeed(d)) return undefined;
+  if (flashback) {
+    const altCost = g.keywordCost(card, 'Flashback');
+    if (altCost === undefined || d.cost.x || !d.spell || !g.canCast(p.id, card, { altCost })) return undefined;
+    if (d.types.includes('Instant') && window !== 'instant' && p.style === 'control') return undefined;
+    const score = effectScore(g, d.spell.effect, { p: p.id, card, x: 0, kicked: false, targets: [] });
+    const harmfulTarget = isHarmful(d.spell.effect) && d.spell.effect.params.ValidTgts !== undefined;
+    if (score <= (harmfulTarget ? 1.5 : 0.5)) return undefined;
+    return { score: score + 0.5, x: 0, kicked: false, flashback: true };   // free card: slightly preferred
+  }
   let x = 0;
   if (d.cost.x) {
     const base = g.spellCost(p.id, card, { fromCommand });
@@ -489,7 +498,7 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
 function castAction(g: Game, p: Player, card: CardInst, fromCommand: boolean, plan: Plan): Action {
   return {
     score: plan.score, label: `cast ${card.def.name}`,
-    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt }),
+    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt, flashback: plan.flashback }),
   };
 }
 
@@ -605,6 +614,35 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
   return acts;
 }
 
+/**
+ * Cycling: landcycle when we're short on lands; cycle a card we can't cast any time soon,
+ * or extra lands once we have plenty. Cards with a "when you cycle" trigger are cycled more readily.
+ */
+function cycleActions(g: Game, p: Player): Action[] {
+  const lands = g.bf.filter(x => x.controller === p.id && x.def.types.includes('Land')).length;
+  const landsInHand = p.hand.filter(isLandCard).length;
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const landcycle = c.def.keywords.some(k => k.startsWith('TypeCycling:'));
+    const cost = g.keywordCost(c, landcycle ? 'TypeCycling' : 'Cycling');
+    if (cost === undefined) continue;
+    let score = 0;
+    if (landcycle) {
+      if (landsInHand === 0 && lands < 7) score = 4.5;
+      else if (c.def.mv > lands + 2 && lands < 6) score = 3;
+    } else {
+      if (isLandCard(c)) score = lands >= 6 && landsInHand > 1 ? 3 : 0;
+      else if (c.def.mv > lands + 2) score = 2.5;
+    }
+    if (c.def.triggers.some(t => t.mode === 'Cycled')) score += 1.5;
+    if (score <= 0) continue;
+    const mc = g.spellCost(p.id, c, { altCost: cost });
+    if (!g.payMana(p.id, mc.generic, mc.pips, false)) continue;
+    acts.push({ score, label: `cycle ${c.def.name}`, run: () => g.cycle(p.id, c) });
+  }
+  return acts;
+}
+
 function runActions(g: Game, p: Player, gather: () => Action[]) {
   for (let guard = 0; guard < 30 && !g.over; guard++) {
     const acts = gather().sort((a, b) => b.score - a.score);
@@ -631,7 +669,12 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       if (reserve && avail - cost < reserve && !(behind && isCreature(card))) continue;
       acts.push(castAction(g, p, card, fromCommand, plan));
     }
+    for (const card of p.graveyard) {
+      const plan = planSpell(g, p, card, false, window, true);
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
     acts.push(...abilityActions(g, p, window));
+    acts.push(...cycleActions(g, p));
     return acts;
   });
 }
@@ -702,7 +745,12 @@ export function endOfTurnWindow(g: Game, p: Player) {
       const plan = planSpell(g, p, card, false, 'instant');
       if (plan) acts.push(castAction(g, p, card, false, plan));
     }
+    for (const card of p.graveyard) {
+      const plan = planSpell(g, p, card, false, 'instant', true);
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
     acts.push(...abilityActions(g, p, 'instant'));
+    acts.push(...cycleActions(g, p));
     return acts;
   });
 }

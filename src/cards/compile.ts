@@ -18,12 +18,12 @@ const IGNORED_APIS = new Set(['StoreSVar', 'Effect', 'Animate', 'GenericChoice',
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
-  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited',
+  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled',
 ]);
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {

@@ -27,6 +27,7 @@ export interface SpellStep { effect: Effect; targets?: Target[] }
 export interface StackItem {
   card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
   sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
+  flashback?: boolean;             // cast from the graveyard; exiled instead of going anywhere else
   countered?: boolean;
   plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
 }
@@ -44,7 +45,7 @@ export interface Ctx {
   spell?: StackItem;
 }
 
-interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number }
+interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number; convoke?: boolean }
 
 export class Game {
   players: [Player, Player];
@@ -442,7 +443,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ mana
-  manaUnits(pid: number): ManaUnit[] {
+  manaUnits(pid: number, convoke = false): ManaUnit[] {
     const units: ManaUnit[] = [];
     let g = 0;
     const p = this.players[pid];
@@ -485,17 +486,22 @@ export class Game {
       const grp = g++;
       for (let i = 0; i < amt; i++) units.push({ group: grp, perm, colors, land: false, treasure: ma.cost.sacSelf, any });
     }
+    // Convoke: each untapped creature (summoning sick or not) can pay {1} or one mana of its color
+    if (convoke) for (const perm of this.bf) {
+      if (perm.controller !== pid || perm.tapped || !perm.def.types.includes('Creature') || units.some(u => u.perm === perm)) continue;
+      units.push({ group: g++, perm, colors: [...perm.def.colors], land: false, treasure: false, any: false, convoke: true });
+    }
     return units;
   }
 
   /** Try to pay a mana cost; returns true if possible. If commit, taps/sacrifices the sources. */
-  payMana(pid: number, generic: number, pips: Pip[], commit: boolean): boolean {
-    const units = this.manaUnits(pid);
+  payMana(pid: number, generic: number, pips: Pip[], commit: boolean, convoke = false): boolean {
+    const units = this.manaUnits(pid, convoke);
     // order: lands with fewest colors first, then dorks, treasures last
     const order = units.map((u, i) => i).sort((a, b) => {
       const ua = units[a], ub = units[b];
-      const sa = (ua.poolIdx !== undefined ? -100 : 0) + (ua.treasure ? 100 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
-      const sb = (ub.poolIdx !== undefined ? -100 : 0) + (ub.treasure ? 100 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
+      const sa = (ua.poolIdx !== undefined ? -100 : 0) + (ua.treasure ? 100 : 0) + (ua.convoke ? 50 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
+      const sb = (ub.poolIdx !== undefined ? -100 : 0) + (ub.treasure ? 100 : 0) + (ub.convoke ? 50 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
       return sa - sb;
     });
     const used = new Set<number>();
@@ -569,7 +575,39 @@ export class Game {
 
   canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
-    return this.payMana(pid, generic, pips, false);
+    return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
+  }
+
+  /** Mana-only alternate cost from a keyword like "Flashback:2 R" (undefined if it costs something else). */
+  keywordCost(c: CardInst | CardDef, kw: string): string | undefined {
+    const def = 'def' in c ? c.def : c;
+    const k = def.keywords.find(x => x.startsWith(kw + ':'));
+    const cost = k?.split(':').slice(kw === 'TypeCycling' ? 2 : 1).join(':');
+    return cost !== undefined && !/[<$]/.test(cost) ? cost : undefined;
+  }
+
+  /** Cycling / landcycling from hand: pay, discard, then draw (or search for the land type). */
+  cycle(pid: number, c: CardInst): boolean {
+    const p = this.players[pid];
+    const type = c.def.keywords.find(k => k.startsWith('TypeCycling:'))?.split(':')[1];
+    const cost = this.keywordCost(c, type ? 'TypeCycling' : 'Cycling');
+    if (cost === undefined || !p.hand.includes(c)) return false;
+    const mc = parseManaCost(cost);
+    if (!this.payMana(pid, mc.generic, mc.pips, true)) return false;
+    this.discard(p, c);
+    if (type) {
+      const filter = type === 'Basic' ? 'Land.Basic' : type;
+      const opts = p.library.filter(x => matches(filter, this.subjectOf(x, pid), { you: pid }));
+      const pick = opts.length ? AI.chooseSearch(this, p, opts, 'Hand') : undefined;
+      if (pick) { p.library.splice(p.library.indexOf(pick), 1); p.hand.push(pick); }
+      this.rng.shuffle(p.library);
+      this.trace(`${type.toLowerCase()}cycles ${c.def.name}${pick ? ` for ${pick.def.name}` : ''}`, pid);
+    } else {
+      this.trace(`cycles ${c.def.name}`, pid);
+      this.draw(pid, 1);
+    }
+    this.emit({ type: 'cycled', player: pid, card: c });
+    return true;
   }
 
   // ------------------------------------------------------------------ lands
@@ -602,20 +640,22 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ casting
-  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean } = {}): boolean {
+  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean } = {}): boolean {
     const p = this.players[pid];
+    if (opts.flashback) { opts = { ...opts, altCost: this.keywordCost(c, 'Flashback') }; if (opts.altCost === undefined || !p.graveyard.includes(c)) return false; }
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
-    if (!this.payMana(pid, generic, pips, true)) return false;
+    if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) return false;
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
+    else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++;
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak };
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
@@ -705,7 +745,7 @@ export class Game {
   private resolveTop() {
     const item = this.stack.pop()!;
     const c = item.card, p = this.players[item.controller];
-    const toYard = () => { if (c.isCommander) p.command.push(c); else p.graveyard.push(c); };
+    const toYard = () => { if (c.isCommander) p.command.push(c); else if (item.flashback) p.exile.push(c); else p.graveyard.push(c); };
     if (item.countered) {
       this.trace(`${c.def.name} is countered`, item.controller);
       this.stats.countered[item.controller]++;
@@ -736,6 +776,7 @@ export class Game {
     } else {
       for (const st of item.plan ?? []) this.resolveEffect(st.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item, preset: st.targets });
       if (c.isCommander) p.command.push(c);
+      else if (item.flashback) p.exile.push(c);
       else if (!p.exile.includes(c)) p.graveyard.push(c);
     }
     this.resolveTriggers();
@@ -918,6 +959,7 @@ export class Game {
     if (this.over) return;
     const candidates: (Perm | CardInst)[] = [...this.bf];
     if (ev.type === 'zone' && ev.from === 'Battlefield') candidates.push(ev.perm);   // leaves-the-battlefield self triggers
+    if (ev.type === 'cycled') candidates.push(ev.card);                             // "when you cycle this card"
     for (const src of candidates) {
       const def = src.def;
       if (!def.triggers.length && !def.keywords.some(k => k.startsWith('Mobilize'))) continue;
@@ -971,7 +1013,7 @@ export class Game {
     const P = trig.params;
     const onBf = this.bf.includes(src as Perm);
     const tz = P.TriggerZones;
-    if (tz && tz !== 'Battlefield') return false;
+    if (tz && tz !== 'Battlefield' && !(ev.type === 'cycled' && tz === 'Graveyard')) return false;
     const ctx: FilterCtx = { you: controller, sourceId: src.id, sourceAttachedTo: (src as Perm).attachedTo, chosenType: (src as Perm).chosenType };
     switch (trig.mode) {
       case 'ChangesZone': case 'ChangesZoneAll': {
@@ -1047,6 +1089,12 @@ export class Game {
         if (P.Number && +P.Number !== ev.nth) return false;
         return true;
       }
+      case 'Cycled': {
+        if (ev.type !== 'cycled') return false;
+        if (ev.card.id !== src.id && !onBf) return false;
+        if (P.ValidActivatingPlayer === 'You' && ev.player !== controller) return false;
+        return !P.ValidCard || matches(P.ValidCard, this.subjectOf(ev.card, ev.player), ctx);
+      }
       case 'Sacrificed': {
         if (ev.type !== 'sacrificed' || !onBf) return false;
         return !P.ValidCard || matches(P.ValidCard, this.subjectOfSnapshot(ev.perm), ctx);
@@ -1076,6 +1124,7 @@ export class Game {
       if (ev.type === 'damage') { triggered.perm = ev.source; triggered.amount = ev.amount; triggered.player = ev.target.kind === 'player' ? ev.target.pid : undefined; if (ev.target.kind === 'perm') triggered.target = ev.target.perm; }
       if (ev.type === 'lifeGained') { triggered.player = ev.player; triggered.amount = ev.amount; }
       if (ev.type === 'drawn' || ev.type === 'phase' || ev.type === 'discard') triggered.player = ev.player;
+      if (ev.type === 'cycled') { triggered.perm = ev.card; triggered.player = ev.player; }
       const src = this.bf.includes(t.perm as Perm) ? (t.perm as Perm) : undefined;
       const tc = t.trig.effect.params.Cost;
       if (tc) {
@@ -1639,6 +1688,7 @@ export type GEvent =
   | { type: 'lifeGained'; player: number; amount: number }
   | { type: 'drawn'; player: number; nth: number; card: CardInst }
   | { type: 'discard'; player: number; card: CardInst }
-  | { type: 'sacrificed'; perm: Perm };
+  | { type: 'sacrificed'; perm: Perm }
+  | { type: 'cycled'; player: number; card: CardInst };
 
 export type { Ability };
