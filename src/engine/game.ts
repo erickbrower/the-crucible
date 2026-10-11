@@ -313,19 +313,22 @@ export class Game {
   }
 
   staticApplies(src: Perm, params: Record<string, string>, target: Perm): boolean {
+    // printed characteristics only: using statsOf here would recurse
+    const subj: Subject = {
+      kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
+      tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
+      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords, counters: target.counters,
+    };
     if (params.AffectedDefined) {
       const d = params.AffectedDefined;
+      // "AffectedDefined$ Self | Affected$ Card.counters_GE8_CHARGE": both must hold
+      if (params.Affected && !matches(params.Affected, subj, this.ctxFor(src))) return false;
       if (d === 'Self') return target.id === src.id;
       if (d === 'Enchanted' || d === 'Equipped' || d === 'Attached') return target.id === src.attachedTo;
       return false;
     }
     if (!params.Affected) return false;
     if (params.EffectZone && params.EffectZone !== 'Battlefield') return false;
-    const subj: Subject = {
-      kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
-      tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
-      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords, counters: target.counters,
-    };
     return matches(params.Affected, subj, this.ctxFor(src));
   }
 
@@ -582,6 +585,28 @@ export class Game {
   canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
     return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
+  }
+
+  /** Station: tap another creature to put charge counters equal to its power on this permanent. */
+  station(perm: Perm, crew: Perm): boolean {
+    if (!perm.def.keywords.some(k => k.startsWith('Station')) || crew === perm || crew.tapped || !crew.def.types.includes('Creature')) return false;
+    crew.tapped = true;
+    const n = Math.max(0, this.statsOf(crew).power);
+    perm.counters.CHARGE = (perm.counters.CHARGE ?? 0) + n;
+    this.trace(`stations ${perm.def.name} with ${crew.def.name} (${perm.counters.CHARGE} charge)`, perm.controller);
+    this.applyTypeStatics(perm);
+    return true;
+  }
+
+  /** "STATION 8+: it's an artifact creature": statics that add the Creature type once their condition holds. */
+  applyTypeStatics(perm: Perm) {
+    if (perm.def.types.includes('Creature')) return;
+    const st = perm.def.statics.find(s => s.mode === 'Continuous' && /Creature/.test(s.params.AddType ?? '') && this.staticApplies(perm, s.params, perm));
+    if (!st) return;
+    (perm as Perm & { frontDef?: CardDef }).frontDef ??= perm.def;
+    const pt = st.params.SetPower ? { power: +st.params.SetPower, toughness: +(st.params.SetToughness ?? st.params.SetPower) } : {};
+    perm.def = { ...perm.def, types: [...perm.def.types, 'Creature'], ...pt };
+    this.trace(`${perm.def.name} becomes an artifact creature`, perm.controller);
   }
 
   /** Warp: at the beginning of the end step, exile warped permanents; they can be cast from exile on a later turn. */

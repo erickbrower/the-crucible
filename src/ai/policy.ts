@@ -665,6 +665,28 @@ function warpActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'):
   return acts;
 }
 
+/**
+ * Station (sorcery speed, so after combat): tap creatures that didn't attack to charge a Spacecraft
+ * or Planet, when we're not under pressure or it finishes the job this turn.
+ */
+function stationActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window !== 'main2') return [];
+  const acts: Action[] = [];
+  const theirPower = myCreatures(g, g.opp(p.id)).reduce((a, x) => a + Math.max(0, g.statsOf(x).power), 0);
+  for (const st of g.bf.filter(x => x.controller === p.id && x.def.keywords.some(k => k.startsWith('Station')))) {
+    const goal = parseInt(st.def.keywords.find(k => k.startsWith('Station'))!.split(':')[1] ?? '0', 10) || 0;
+    const have = st.counters.CHARGE ?? 0;
+    if (have >= goal) continue;
+    const crew = myCreatures(g, p.id).filter(c => c !== st && !c.tapped && g.statsOf(c).power > 0)
+      .sort((a, b) => g.statsOf(b).power - g.statsOf(a).power)[0];
+    if (!crew) continue;
+    const finishes = have + g.statsOf(crew).power >= goal;
+    if (!finishes && p.life <= theirPower * 2) continue;
+    acts.push({ score: finishes ? 3 : 1.5, label: `station ${st.def.name}`, run: () => g.station(st, crew) });
+  }
+  return acts;
+}
+
 function runActions(g: Game, p: Player, gather: () => Action[]) {
   for (let guard = 0; guard < 30 && !g.over; guard++) {
     const acts = gather().sort((a, b) => b.score - a.score);
@@ -702,6 +724,7 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       if (plan) acts.push(castAction(g, p, w.card, false, { ...plan, fromExile: true }));
     }
     acts.push(...warpActions(g, p, window));
+    acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
     acts.push(...cycleActions(g, p));
     return acts;
