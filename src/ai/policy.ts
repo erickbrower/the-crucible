@@ -729,6 +729,26 @@ export function ninjaStep(g: Game, p: Player, attackers: Perm[], blocks: Map<Per
   return cur;
 }
 
+/**
+ * Crew vehicles before attacking: tap the least useful creatures (summoning sick ones cost nothing)
+ * when the vehicle hits harder than the crew would.
+ */
+export function crewVehicles(g: Game, p: Player) {
+  for (const v of g.bf.filter(x => x.controller === p.id && !x.tapped && !x.baseDef && x.def.keywords.some(k => k.startsWith('Crew:')))) {
+    if (v.sick && !g.has(v, 'Haste')) continue;
+    const n = parseInt(v.def.keywords.find(k => k.startsWith('Crew:'))!.split(':')[1], 10);
+    const canAttack = (c: Perm) => !c.sick || g.has(c, 'Haste');
+    const pool = myCreatures(g, p.id).filter(c => !c.tapped && c !== v && g.statsOf(c).power > 0)
+      .sort((a, b) => (canAttack(a) ? g.statsOf(a).power : 0) - (canAttack(b) ? g.statsOf(b).power : 0) || g.statsOf(a).power - g.statsOf(b).power);
+    const crew: Perm[] = [];
+    let total = 0;
+    for (const c of pool) { if (total >= n) break; crew.push(c); total += g.statsOf(c).power; }
+    if (total < n) continue;
+    const lost = crew.filter(canAttack).reduce((a, c) => a + g.statsOf(c).power, 0);
+    if ((v.def.power ?? 0) > lost) g.crew(v, crew);
+  }
+}
+
 /** Earthbend target: stack onto a land that's already a creature, else an untapped basic (it has haste and can attack). */
 export function chooseEarthbendLand(g: Game, pid: number): Perm | undefined {
   const lands = g.bf.filter(x => x.controller === pid && x.def.types.includes('Land'));

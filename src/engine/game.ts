@@ -177,6 +177,7 @@ export class Game {
 
   cleanup() {
     for (const pl of this.players) pl.pool = [];
+    for (const perm of this.bf) if (perm.baseDef) { perm.def = perm.baseDef; perm.baseDef = undefined; }   // crew wears off
     for (const perm of this.bf) {
       perm.damage = 0; perm.deathtouched = false; perm.tempP = 0; perm.tempT = 0; perm.tempKw = [];
       perm.attacking = false; perm.blocking = false;
@@ -865,9 +866,22 @@ export class Game {
   }
 
   private originalDef(perm: Perm): CardDef {
-    // transformed permanents return to their front face
+    // transformed permanents return to their front face; crewed vehicles stop being creatures
     const front = (perm as Perm & { frontDef?: CardDef }).frontDef;
-    return front ?? perm.def;
+    return front ?? perm.baseDef ?? perm.def;
+  }
+
+  /** Crew N: tap creatures with total power N or more; the Vehicle becomes an artifact creature until end of turn. */
+  crew(vehicle: Perm, crew: Perm[]): boolean {
+    const n = parseInt(vehicle.def.keywords.find(k => k.startsWith('Crew:'))?.split(':')[1] ?? '', 10);
+    if (isNaN(n) || vehicle.baseDef) return false;
+    if (crew.some(c => c.tapped || c === vehicle || !c.def.types.includes('Creature') || !this.bf.includes(c))) return false;
+    if (crew.reduce((a, c) => a + Math.max(0, this.statsOf(c).power), 0) < n) return false;
+    for (const c of crew) c.tapped = true;
+    vehicle.baseDef = vehicle.def;
+    vehicle.def = { ...vehicle.def, types: [...vehicle.def.types, 'Creature'] };
+    this.trace(`crews ${vehicle.def.name} with ${crew.map(c => c.def.name).join(', ')}`, vehicle.controller);
+    return true;
   }
 
   destroy(perm: Perm) {
@@ -1567,6 +1581,7 @@ export class Game {
   combat() {
     this.phase = 'combat';
     const ap = this.active, dp = this.opp(ap);
+    AI.crewVehicles(this, this.players[ap]);
     const attackers = AI.chooseAttackers(this, this.players[ap]);
     if (!attackers.length) return;
     this.players[ap].attackedThisTurn = true;

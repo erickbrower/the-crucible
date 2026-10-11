@@ -30,7 +30,8 @@ export interface Perm extends CardInst {
   loyaltyUsedTurn?: number;
   chosenType?: string;
   noUntap?: boolean;
-  earthbent?: boolean;      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  earthbent?: boolean;
+  baseDef?: CardDef;        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
 }
 
 export interface DeckList {
