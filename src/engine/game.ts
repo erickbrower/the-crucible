@@ -2,7 +2,7 @@
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
-import { loadToken, parseCost } from '../cards/compile.js';
+import { loadToken, parseCost, parseManaCost, compileGift } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
 import * as AI from '../ai/policy.js';
@@ -26,6 +26,11 @@ export interface SpellStep { effect: Effect; targets?: Target[] }
 
 export interface StackItem {
   card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
+  sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
+  flashback?: boolean;             // cast from the graveyard; exiled instead of going anywhere else
+  warp?: boolean;                  // cast for its warp cost: exiled at the next end step
+  gift?: boolean;                  // gift promised to the opponent
+  modes?: Effect[];                // Spree: the modes paid for
   countered?: boolean;
   plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
 }
@@ -43,7 +48,7 @@ export interface Ctx {
   spell?: StackItem;
 }
 
-interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean }
+interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number; convoke?: boolean }
 
 export class Game {
   players: [Player, Player];
@@ -162,6 +167,7 @@ export class Game {
     if (this.over) return;
     this.phase = 'end';
     this.emit({ type: 'phase', phase: 'End of Turn', player: this.active });
+    this.exileWarped();
     // opponent's end-of-turn window (flash creatures, instant removal, draw)
     AI.endOfTurnWindow(this, this.players[this.opp(this.active)]);
     this.cleanup();
@@ -174,6 +180,8 @@ export class Game {
   }
 
   cleanup() {
+    for (const pl of this.players) pl.pool = [];
+    for (const perm of this.bf) if (perm.baseDef) { perm.def = perm.baseDef; perm.baseDef = undefined; }   // crew wears off
     for (const perm of this.bf) {
       perm.damage = 0; perm.deathtouched = false; perm.tempP = 0; perm.tempT = 0; perm.tempKw = [];
       perm.attacking = false; perm.blocking = false;
@@ -230,7 +238,7 @@ export class Game {
       return {
         kind: 'card', def: perm.def, controller: perm.controller, owner: perm.owner, token: perm.token, id: perm.id,
         tapped: perm.tapped, attacking: perm.attacking, blocking: perm.blocking, power: st.power, toughness: st.toughness,
-        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield',
+        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters, giftPromised: perm.giftPromised,
       };
     }
     return { kind: 'card', def: x.def, controller: controller ?? (x as Perm).controller ?? x.owner, owner: x.owner, token: x.token, id: x.id,
@@ -277,6 +285,7 @@ export class Game {
   private condDepth = 0;
   /** "As long as ..." conditions on a static: CheckSVar/SVarCompare and IsPresent/PresentCompare. */
   staticConditionMet(src: Perm | CardInst, params: Record<string, string>, controller = (src as Perm).controller ?? src.owner): boolean {
+    if (params.Condition === 'MaxSpeed' && (this.players[controller].speed ?? 0) < 4) return false;
     if (!params.CheckSVar && !params.IsPresent) return true;
     if (this.condDepth > 0) return true;            // avoid recursion through statsOf
     this.condDepth++;
@@ -289,9 +298,16 @@ export class Game {
       };
       const ctx: Ctx = { p: controller, source: src as Perm, x: 0, kicked: false, targets: [] };
       if (params.CheckSVar && !cmp(this.amount(params.CheckSVar, ctx, src.def), params.SVarCompare, ctx)) return false;
-      if (params.IsPresent && (!params.PresentZone || params.PresentZone === 'Battlefield')) {
+      if (params.IsPresent) {
         const fctx = { you: controller, sourceId: src.id, sourceAttachedTo: (src as Perm).attachedTo, chosenType: (src as Perm).chosenType };
-        const n = this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
+        let n = 0;
+        for (const zone of (params.PresentZone ?? 'Battlefield').split(',')) {
+          if (zone === 'Battlefield') n += this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
+          else {
+            const key = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile', Library: 'library' } as Record<string, 'graveyard' | 'hand' | 'exile' | 'library'>)[zone];
+            if (key) for (const pl of this.players) n += pl[key].filter(c => matches(params.IsPresent, this.subjectOf(c, pl.id), fctx)).length;
+          }
+        }
         if (!cmp(n, params.PresentCompare, ctx)) return false;
       }
       return true;
@@ -299,19 +315,22 @@ export class Game {
   }
 
   staticApplies(src: Perm, params: Record<string, string>, target: Perm): boolean {
+    // printed characteristics only: using statsOf here would recurse
+    const subj: Subject = {
+      kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
+      tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
+      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords, counters: target.counters,
+    };
     if (params.AffectedDefined) {
       const d = params.AffectedDefined;
+      // "AffectedDefined$ Self | Affected$ Card.counters_GE8_CHARGE": both must hold
+      if (params.Affected && !matches(params.Affected, subj, this.ctxFor(src))) return false;
       if (d === 'Self') return target.id === src.id;
       if (d === 'Enchanted' || d === 'Equipped' || d === 'Attached') return target.id === src.attachedTo;
       return false;
     }
     if (!params.Affected) return false;
     if (params.EffectZone && params.EffectZone !== 'Battlefield') return false;
-    const subj: Subject = {
-      kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
-      tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
-      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords,
-    };
     return matches(params.Affected, subj, this.ctxFor(src));
   }
 
@@ -327,6 +346,34 @@ export class Game {
   unblockable(perm: Perm) {
     if (this.has(perm, 'Unblockable') || this.has(perm, "Can't be blocked")) return true;
     return perm.def.statics.some(s => s.mode === 'CantBlockBy' && (s.params.ValidAttacker ?? '').includes('Self') && !s.params.ValidBlocker);
+  }
+  /** Total firebending N on a creature, printed or granted by a static ("has firebending 2 as long as ..."). */
+  firebending(perm: Perm) {
+    const val = (k: string) => k.startsWith('Firebending') ? (parseInt(k.split(':')[1] ?? '1', 10) || 1) : 0;
+    let n = perm.def.keywords.reduce((a, k) => a + val(k), 0);
+    for (const src of this.bf) for (const st of src.def.statics) {
+      if (st.mode !== 'Continuous' || !st.params.AddKeyword?.includes('Firebending')) continue;
+      if (!this.staticApplies(src, st.params, perm) || !this.staticConditionMet(src, st.params)) continue;
+      n += st.params.AddKeyword.split(' & ').reduce((a, k) => a + val(k), 0);
+    }
+    return n;
+  }
+
+  /** Fewest creatures that can block this attacker (menace = 2, "except by three or more" = 3). */
+  minBlockers(perm: Perm) {
+    let n = this.has(perm, 'Menace') ? 2 : 1;
+    for (const src of this.bf) for (const s of src.def.statics) {
+      if (s.mode === 'MinMaxBlocker' && s.params.Min && this.staticHits(src, s.params, perm)) n = Math.max(n, +s.params.Min);
+    }
+    return n;
+  }
+  /** Most creatures that can block this attacker ("can't be blocked by more than one creature"). */
+  maxBlockers(perm: Perm) {
+    let n = Infinity;
+    for (const src of this.bf) for (const s of src.def.statics) {
+      if (s.mode === 'MinMaxBlocker' && s.params.Max && this.staticHits(src, s.params, perm)) n = Math.min(n, +s.params.Max);
+    }
+    return n;
   }
   private staticHits(src: Perm, params: Record<string, string>, perm: Perm) {
     const f = params.ValidCard ?? params.Affected;
@@ -356,9 +403,11 @@ export class Game {
     let base: number | undefined;
     let rest = '';
     if ((m = expr.match(/^Count\$Kicked\.(\d+)\.(\d+)/))) return ctx.kicked ? +m[1] : +m[2];
+    if ((m = expr.match(/^Count\$PromisedGift\.(\d+)\.(\d+)/))) return (ctx.spell?.gift ?? ctx.source?.giftPromised) ? +m[1] : +m[2];
     if ((m = expr.match(/^Count\$Compare .*\.(\d+)\.(\d+)$/))) return +m[2];
     if (/^Count\$xPaid/.test(expr)) return ctx.x;
     if (/^Count\$YourLifeTotal/.test(expr)) return me.life;
+    if (/^Count\$YourSpeed/.test(expr)) return me.speed ?? 0;
     if (/^Count\$(LifeYouGainedThisTurn|YourLifeGainedThisTurn)/.test(expr)) return me.lifeGainedThisTurn;
     if (/^Count\$CardsInYourHand/.test(expr)) return me.hand.length;
     if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
@@ -405,10 +454,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ mana
-  manaUnits(pid: number): ManaUnit[] {
+  manaUnits(pid: number, convoke = false): ManaUnit[] {
     const units: ManaUnit[] = [];
     let g = 0;
     const p = this.players[pid];
+    (p.pool ?? []).forEach((c, i) => units.push({ group: g++, colors: [c], land: false, treasure: false, any: false, poolIdx: i }));
     for (const perm of this.bf) {
       if (perm.controller !== pid || perm.tapped) continue;
       const d = perm.def;
@@ -428,7 +478,8 @@ export class Game {
         units.push({ group: g++, perm, colors, land: true, treasure: false, any: false });
         continue;
       }
-      const ma = d.abilities.find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0);
+      const ma = d.abilities.find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0
+        && (a.condition !== 'MaxSpeed' || (p.speed ?? 0) >= 4));
       if (!ma) continue;
       const prod = ma.effect.params.Produced ?? 'C';
       let colors: Color[] = [];
@@ -447,17 +498,22 @@ export class Game {
       const grp = g++;
       for (let i = 0; i < amt; i++) units.push({ group: grp, perm, colors, land: false, treasure: ma.cost.sacSelf, any });
     }
+    // Convoke: each untapped creature (summoning sick or not) can pay {1} or one mana of its color
+    if (convoke) for (const perm of this.bf) {
+      if (perm.controller !== pid || perm.tapped || !perm.def.types.includes('Creature') || units.some(u => u.perm === perm)) continue;
+      units.push({ group: g++, perm, colors: [...perm.def.colors], land: false, treasure: false, any: false, convoke: true });
+    }
     return units;
   }
 
   /** Try to pay a mana cost; returns true if possible. If commit, taps/sacrifices the sources. */
-  payMana(pid: number, generic: number, pips: Pip[], commit: boolean): boolean {
-    const units = this.manaUnits(pid);
+  payMana(pid: number, generic: number, pips: Pip[], commit: boolean, convoke = false): boolean {
+    const units = this.manaUnits(pid, convoke);
     // order: lands with fewest colors first, then dorks, treasures last
     const order = units.map((u, i) => i).sort((a, b) => {
       const ua = units[a], ub = units[b];
-      const sa = (ua.treasure ? 100 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
-      const sb = (ub.treasure ? 100 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
+      const sa = (ua.poolIdx !== undefined ? -100 : 0) + (ua.treasure ? 100 : 0) + (ua.convoke ? 50 : 0) + (ua.land ? 0 : 10) + ua.colors.length;
+      const sb = (ub.poolIdx !== undefined ? -100 : 0) + (ub.treasure ? 100 : 0) + (ub.convoke ? 50 : 0) + (ub.land ? 0 : 10) + ub.colors.length;
       return sa - sb;
     });
     const used = new Set<number>();
@@ -488,6 +544,8 @@ export class Game {
       const chosen = [...used, ...rest.slice(0, need)];
       const groups = new Set(chosen.map(i => units[i].group));
       const done = new Set<Perm>();
+      const spentPool = chosen.map(i => units[i].poolIdx).filter((x): x is number => x !== undefined);
+      if (spentPool.length) p.pool = (p.pool ?? []).filter((_, i) => !spentPool.includes(i));
       for (const i of chosen) {
         const u = units[i];
         if (!u.perm || done.has(u.perm) || !groups.has(u.group)) continue;
@@ -502,9 +560,10 @@ export class Game {
 
   availableMana(pid: number) { return this.manaUnits(pid).length; }
 
-  spellCost(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean } = {}) {
-    let generic = c.def.cost.generic + (opts.x ?? 0) * Math.max(1, c.def.cost.x);
-    const pips = [...c.def.cost.pips];
+  spellCost(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
+    const base = opts.altCost !== undefined ? parseManaCost(opts.altCost) : c.def.cost;
+    let generic = base.generic + (opts.x ?? 0) * Math.max(1, c.def.cost.x);
+    const pips = [...base.pips];
     if (opts.kicked && c.def.kicker) { generic += c.def.kicker.generic; pips.push(...c.def.kicker.pips); }
     if (opts.fromCommand) generic += this.players[pid].commanderTax;
     if (c.def.affinity) {
@@ -518,7 +577,7 @@ export class Game {
         if (st.mode !== 'ReduceCost' || st.params.Activator === 'Opponent') continue;
         if (st.params.ValidCard && !matches(st.params.ValidCard, this.subjectOf(c, pid), this.ctxFor(src))) continue;
         if (st.params.Type && !/Spell/.test(st.params.Type)) continue;
-        const amt = parseInt(st.params.Amount ?? '1', 10) || 1;
+        const amt = this.amount(st.params.Amount ?? '1', { p: pid, source: src, x: 0, kicked: false, targets: [] }, src.def);
         generic = Math.max(0, generic - amt);
       }
     }
@@ -526,9 +585,74 @@ export class Game {
     return { generic, pips };
   }
 
-  canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean } = {}) {
+  canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
-    return this.payMana(pid, generic, pips, false);
+    if (this.isSpree(c.def)) return AI.chooseSpreeModes(this, pid, c, generic, pips).length > 0;
+    return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
+  }
+
+  /** Station: tap another creature to put charge counters equal to its power on this permanent. */
+  station(perm: Perm, crew: Perm): boolean {
+    if (!perm.def.keywords.some(k => k.startsWith('Station')) || crew === perm || crew.tapped || !crew.def.types.includes('Creature')) return false;
+    crew.tapped = true;
+    const n = Math.max(0, this.statsOf(crew).power);
+    perm.counters.CHARGE = (perm.counters.CHARGE ?? 0) + n;
+    this.trace(`stations ${perm.def.name} with ${crew.def.name} (${perm.counters.CHARGE} charge)`, perm.controller);
+    this.applyTypeStatics(perm);
+    return true;
+  }
+
+  /** "STATION 8+: it's an artifact creature": statics that add the Creature type once their condition holds. */
+  applyTypeStatics(perm: Perm) {
+    if (perm.def.types.includes('Creature')) return;
+    const st = perm.def.statics.find(s => s.mode === 'Continuous' && /Creature/.test(s.params.AddType ?? '') && this.staticApplies(perm, s.params, perm));
+    if (!st) return;
+    (perm as Perm & { frontDef?: CardDef }).frontDef ??= perm.def;
+    const pt = st.params.SetPower ? { power: +st.params.SetPower, toughness: +(st.params.SetToughness ?? st.params.SetPower) } : {};
+    perm.def = { ...perm.def, types: [...perm.def.types, 'Creature'], ...pt };
+    this.trace(`${perm.def.name} becomes an artifact creature`, perm.controller);
+  }
+
+  /** Warp: at the beginning of the end step, exile warped permanents; they can be cast from exile on a later turn. */
+  exileWarped() {
+    for (const perm of this.bf.filter(x => x.warped)) {
+      const owner = this.players[perm.owner];
+      this.leave(perm, 'exile');
+      const card = owner.exile.find(c => c.id === perm.id);
+      if (card) { owner.warpExile = [...(owner.warpExile ?? []), { card, turn: this.turn }]; this.trace(`${card.def.name} is exiled (warp)`, perm.owner); }
+    }
+  }
+
+  /** Mana-only alternate cost from a keyword like "Flashback:2 R" (undefined if it costs something else). */
+  keywordCost(c: CardInst | CardDef, kw: string): string | undefined {
+    const def = 'def' in c ? c.def : c;
+    const k = def.keywords.find(x => x.startsWith(kw + ':'));
+    const cost = k?.split(':').slice(kw === 'TypeCycling' ? 2 : 1).join(':');
+    return cost !== undefined && !/[<$]/.test(cost) ? cost : undefined;
+  }
+
+  /** Cycling / landcycling from hand: pay, discard, then draw (or search for the land type). */
+  cycle(pid: number, c: CardInst): boolean {
+    const p = this.players[pid];
+    const type = c.def.keywords.find(k => k.startsWith('TypeCycling:'))?.split(':')[1];
+    const cost = this.keywordCost(c, type ? 'TypeCycling' : 'Cycling');
+    if (cost === undefined || !p.hand.includes(c)) return false;
+    const mc = parseManaCost(cost);
+    if (!this.payMana(pid, mc.generic, mc.pips, true)) return false;
+    this.discard(p, c);
+    if (type) {
+      const filter = type === 'Basic' ? 'Land.Basic' : type;
+      const opts = p.library.filter(x => matches(filter, this.subjectOf(x, pid), { you: pid }));
+      const pick = opts.length ? AI.chooseSearch(this, p, opts, 'Hand') : undefined;
+      if (pick) { p.library.splice(p.library.indexOf(pick), 1); p.hand.push(pick); }
+      this.rng.shuffle(p.library);
+      this.trace(`${type.toLowerCase()}cycles ${c.def.name}${pick ? ` for ${pick.def.name}` : ''}`, pid);
+    } else {
+      this.trace(`cycles ${c.def.name}`, pid);
+      this.draw(pid, 1);
+    }
+    this.emit({ type: 'cycled', player: pid, card: c });
+    return true;
   }
 
   // ------------------------------------------------------------------ lands
@@ -561,31 +685,49 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ casting
-  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm } = {}): boolean {
+  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean; warp?: boolean; fromExile?: boolean } = {}): boolean {
     const p = this.players[pid];
+    if (opts.flashback) { opts = { ...opts, altCost: this.keywordCost(c, 'Flashback') }; if (opts.altCost === undefined || !p.graveyard.includes(c)) return false; }
+    if (opts.warp) { opts = { ...opts, altCost: this.keywordCost(c, 'Warp') }; if (opts.altCost === undefined || !p.hand.includes(c)) return false; }
+    if (opts.fromExile && !(p.warpExile ?? []).some(w => w.card === c && w.turn < this.turn)) return false;
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
-    if (!this.payMana(pid, generic, pips, true)) return false;
+    // Spree: each chosen mode adds its own cost
+    let modes: Effect[] | undefined;
+    if (this.isSpree(c.def)) {
+      modes = AI.chooseSpreeModes(this, pid, c, generic, pips);
+      if (!modes.length) return false;
+      for (const m of modes) { const mc = parseManaCost(m.params.ModeCost); generic += mc.generic; pips = [...pips, ...mc.pips]; }
+    }
+    if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) return false;
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
+    else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
+    else if (opts.fromExile) { p.exile.splice(p.exile.indexOf(c), 1); p.warpExile = p.warpExile!.filter(w => w.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++;
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand };
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, modes,
+      gift: c.def.keywords.includes('Gift') && AI.promiseGift(this, pid, c) };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${opts.fromExile ? ' from exile' : ''}${item.gift ? ' (gift promised)' : ''}${modes ? ` (spree: ${modes.length} mode${modes.length > 1 ? 's' : ''})` : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
     this.stack.push(item);
     this.emit({ type: 'cast', player: pid, card: c, item });
     // prowess
-    if (!isCreature) for (const perm of this.bf) if (perm.controller === pid && this.has(perm, 'Prowess')) { perm.tempP++; perm.tempT++; }
+    if (!isCreature) for (const perm of this.bf) if (perm.controller === pid && this.has(perm, 'Prowess')) {
+      const n = Math.max(1, perm.def.keywords.filter(k => k === 'Prowess').length);   // Thor Odinson has prowess twice
+      perm.tempP += n; perm.tempT += n;
+    }
     this.resolveTriggers();
     if (!this.inPriority) this.settle(pid);
     return true;
   }
+
+  isSpree(d: CardDef) { return d.keywords.includes('Spree') && d.spell?.effect.api === 'Charm'; }
 
   isPermanentSpell(d: CardDef) {
     return d.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !d.types.includes('Instant') && !d.types.includes('Sorcery');
@@ -593,7 +735,10 @@ export class Game {
 
   private lockTargets(eff: Effect, ctx: Ctx): SpellStep[] {
     let steps: Effect[] = [eff];
-    if (eff.api === 'Charm') {
+    if (eff.api === 'Charm' && ctx.spell?.modes) {
+      steps = [...ctx.spell.modes];
+      if (eff.sub) steps.push(eff.sub);
+    } else if (eff.api === 'Charm') {
       const n = eff.params.CharmNum ? Math.max(1, this.amount(eff.params.CharmNum, ctx)) : 1;
       steps = AI.chooseCharm(this, eff, ctx).slice(0, n);
       if (eff.sub) steps.push(eff.sub);
@@ -661,7 +806,7 @@ export class Game {
   private resolveTop() {
     const item = this.stack.pop()!;
     const c = item.card, p = this.players[item.controller];
-    const toYard = () => { if (c.isCommander) p.command.push(c); else p.graveyard.push(c); };
+    const toYard = () => { if (c.isCommander) p.command.push(c); else if (item.flashback) p.exile.push(c); else p.graveyard.push(c); };
     if (item.countered) {
       this.trace(`${c.def.name} is countered`, item.controller);
       this.stats.countered[item.controller]++;
@@ -680,8 +825,18 @@ export class Game {
 
   resolveSpell(item: StackItem) {
     const c = item.card; const pid = item.controller; const p = this.players[pid];
+    if (item.gift && c.def.svars.GiftAbility) {
+      this.trace(`gives P${this.opp(pid)} the gift`, pid);
+      this.resolveEffect(compileGift(c.def), { p: pid, card: c, x: 0, kicked: false, targets: [], spell: item });
+    }
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
-      const perm = this.enter(c, pid, {});
+      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {}, { giftPromised: item.gift });
+      if (item.warp) perm.warped = true;
+      if (item.kicked && c.def.offspring) {
+        // Offspring: a 1/1 token copy
+        this.enter({ id: this.nextId++, def: { ...c.def, power: 1, toughness: 1 }, owner: pid, token: true }, pid, { token: true });
+        this.trace(`offspring: creates a 1/1 copy of ${c.def.name}`, pid);
+      }
       if (c.def.keywords.some(k => k.startsWith('Enchant'))) {
         const host = AI.chooseAuraHost(this, perm);
         if (host) perm.attachedTo = host.id; else this.leave(perm, 'graveyard');
@@ -692,6 +847,7 @@ export class Game {
     } else {
       for (const st of item.plan ?? []) this.resolveEffect(st.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item, preset: st.targets });
       if (c.isCommander) p.command.push(c);
+      else if (item.flashback) p.exile.push(c);
       else if (!p.exile.includes(c)) p.graveyard.push(c);
     }
     this.resolveTriggers();
@@ -699,11 +855,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ battlefield movement
-  enter(c: CardInst, controller: number, opts: { tapped?: boolean; token?: boolean; attacking?: boolean } = {}): Perm {
+  enter(c: CardInst, controller: number, opts: { tapped?: boolean; token?: boolean; attacking?: boolean } = {}, extra: Partial<Perm> = {}): Perm {
     const perm: Perm = {
       ...c, controller, tapped: !!opts.tapped, sick: true, token: !!opts.token || !!c.token, counters: {}, damage: 0,
       deathtouched: false, tempP: 0, tempT: 0, tempKw: [], exiledUntilLeaves: [], transformed: false, enteredTurn: this.turn,
-      attacking: opts.attacking,
+      attacking: opts.attacking, ...extra,
     };
     if (c.def.loyalty !== undefined) perm.counters.LOYALTY = c.def.loyalty;
     for (const k of c.def.keywords) {
@@ -717,6 +873,7 @@ export class Game {
       perm.counters[om[2].startsWith('+') ? 'P1P1' : 'M1M1'] = n;
     }
     this.bf.push(perm);
+    if (c.def.keywords.includes('Start your engines') && !this.players[controller].speed) this.players[controller].speed = 1;
     // legend rule
     if (c.def.supertypes.includes('Legendary')) {
       const dup = this.bf.filter(x => x !== perm && x.controller === controller && x.def.name === perm.def.name);
@@ -770,14 +927,32 @@ export class Game {
       else owner.library.unshift(card);
     }
     if (wasCreature && to === 'graveyard') this.players[perm.controller].creaturesDiedThisTurn++;
+    if (perm.earthbent && !perm.token && (dest === 'graveyard' || dest === 'exile')) {
+      const zone = dest === 'graveyard' ? owner.graveyard : owner.exile;
+      const k = zone.findIndex(c => c.id === perm.id);
+      if (k >= 0) { const [c] = zone.splice(k, 1); this.enter(c, perm.owner, { tapped: true }); this.trace(`${c.def.name} returns to the battlefield tapped`, perm.owner); }
+    }
     if (opts.sacrificed) this.emit({ type: 'sacrificed', perm: snapshot });
     this.emit({ type: 'zone', perm: snapshot, from: 'Battlefield', to: to === 'graveyard' ? 'Graveyard' : to === 'exile' ? 'Exile' : to === 'hand' ? 'Hand' : 'Library' });
   }
 
   private originalDef(perm: Perm): CardDef {
-    // transformed permanents return to their front face
+    // transformed permanents return to their front face; crewed vehicles stop being creatures
     const front = (perm as Perm & { frontDef?: CardDef }).frontDef;
-    return front ?? perm.def;
+    return front ?? perm.baseDef ?? perm.def;
+  }
+
+  /** Crew N: tap creatures with total power N or more; the Vehicle becomes an artifact creature until end of turn. */
+  crew(vehicle: Perm, crew: Perm[]): boolean {
+    const n = parseInt(vehicle.def.keywords.find(k => k.startsWith('Crew:'))?.split(':')[1] ?? '', 10);
+    if (isNaN(n) || vehicle.baseDef) return false;
+    if (crew.some(c => c.tapped || c === vehicle || !c.def.types.includes('Creature') || !this.bf.includes(c))) return false;
+    if (crew.reduce((a, c) => a + Math.max(0, this.statsOf(c).power), 0) < n) return false;
+    for (const c of crew) c.tapped = true;
+    vehicle.baseDef = vehicle.def;
+    vehicle.def = { ...vehicle.def, types: [...vehicle.def.types, 'Creature'] };
+    this.trace(`crews ${vehicle.def.name} with ${crew.map(c => c.def.name).join(', ')}`, vehicle.controller);
+    return true;
   }
 
   destroy(perm: Perm) {
@@ -797,14 +972,24 @@ export class Game {
     this.emit({ type: 'lifeGained', player: pid, amount: amt });
   }
 
+  /** Speed goes up once on each of your turns when an opponent loses life. */
+  private speedUp(loser: number) {
+    const me = this.players[this.opp(loser)];
+    if (this.active !== me.id || !me.speed || me.speed >= 4 || me.speedTurn === this.turn) return;
+    me.speed++; me.speedTurn = this.turn;
+    this.trace(`speed ${me.speed}${me.speed === 4 ? ' (max speed)' : ''}`, me.id);
+  }
+
   loseLife(pid: number, n: number) {
     if (n <= 0) return;
+    this.speedUp(pid);
     this.players[pid].life -= n;
     if (this.players[pid].life <= 0) this.lose(pid, 'life');
   }
 
   dealDamage(source: Perm | CardInst | undefined, controller: number, target: Target, amount: number, combat: boolean) {
     if (amount <= 0) return 0;
+    if (!this.inCombatDamage) this.damageBatch++;
     // noncombat damage modifiers (Tomik, Twinflame Tyrant style)
     if (!combat) {
       const hitsOpp = (target.kind === 'player' && target.pid !== controller) || (target.kind === 'perm' && target.perm.controller !== controller);
@@ -820,6 +1005,7 @@ export class Game {
     const srcPerm = source && this.bf.includes(source as Perm) ? (source as Perm) : undefined;
     const kws = srcPerm ? this.statsOf(srcPerm).keywords : source?.def.keywords.map(k => k.split(':')[0]) ?? [];
     if (target.kind === 'player') {
+      this.speedUp(target.pid);
       this.players[target.pid].life -= amount;
       this.stats.damage[controller] += amount;
       if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');
@@ -869,6 +1055,7 @@ export class Game {
     if (this.over) return;
     const candidates: (Perm | CardInst)[] = [...this.bf];
     if (ev.type === 'zone' && ev.from === 'Battlefield') candidates.push(ev.perm);   // leaves-the-battlefield self triggers
+    if (ev.type === 'cycled') candidates.push(ev.card);                             // "when you cycle this card"
     for (const src of candidates) {
       const def = src.def;
       if (!def.triggers.length && !def.keywords.some(k => k.startsWith('Mobilize'))) continue;
@@ -876,6 +1063,15 @@ export class Game {
       for (const trig of def.triggers) {
         if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev))
           this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+      }
+    }
+    // Firebending N: add {R} N times, until end of combat
+    if (ev.type === 'attacks') {
+      const n = this.firebending(ev.perm);
+      if (n) {
+        const pl = this.players[ev.perm.controller];
+        pl.pool = [...(pl.pool ?? []), ...Array<Color>(n).fill('R')];
+        this.trace(`${ev.perm.def.name} firebends: adds ${'{R}'.repeat(n)}`, ev.perm.controller);
       }
     }
     // Mobilize keyword
@@ -893,12 +1089,22 @@ export class Game {
   }
 
   private triggerCounts = new Map<string, number>();
+  damageBatch = 0;                 // combat damage step (or one noncombat damage event): "one or more ... deal damage" triggers once per batch
+  private inCombatDamage = false;
+  private onceFired = new Set<string>();
   /** "Only during your turn", "the first time each turn", "only once each turn". */
   private triggerLimitsOk(trig: Trigger, src: Perm | CardInst, controller: number, ev: GEvent): boolean {
     const P = trig.params;
     if (P.PlayerTurn === 'True' && this.active !== controller) return false;
     if (P.PlayerTurn === 'False' && this.active === controller) return false;
     if (P.FirstTime === 'True' && ev.type === 'lifeGained' && this.players[ev.player].lifeGainedThisTurn !== ev.amount) return false;
+    if (trig.mode === 'DamageDoneOnce') {
+      const key = `${this.damageBatch}:${ev.type}:${src.id}:${src.def.triggers.indexOf(trig)}`;
+      if (ev.type === 'damage') {
+        if (this.onceFired.has(key)) return false;
+        this.onceFired.add(key);
+      }
+    }
     const lim = P.ActivationLimit ? parseInt(P.ActivationLimit, 10) : NaN;
     if (!isNaN(lim)) {
       const key = `${this.turn}:${this.active}:${src.id}:${src.def.triggers.indexOf(trig)}`;
@@ -913,7 +1119,7 @@ export class Game {
     const P = trig.params;
     const onBf = this.bf.includes(src as Perm);
     const tz = P.TriggerZones;
-    if (tz && tz !== 'Battlefield') return false;
+    if (tz && tz !== 'Battlefield' && !(ev.type === 'cycled' && tz === 'Graveyard')) return false;
     const ctx: FilterCtx = { you: controller, sourceId: src.id, sourceAttachedTo: (src as Perm).attachedTo, chosenType: (src as Perm).chosenType };
     switch (trig.mode) {
       case 'ChangesZone': case 'ChangesZoneAll': {
@@ -989,6 +1195,12 @@ export class Game {
         if (P.Number && +P.Number !== ev.nth) return false;
         return true;
       }
+      case 'Cycled': {
+        if (ev.type !== 'cycled') return false;
+        if (ev.card.id !== src.id && !onBf) return false;
+        if (P.ValidActivatingPlayer === 'You' && ev.player !== controller) return false;
+        return !P.ValidCard || matches(P.ValidCard, this.subjectOf(ev.card, ev.player), ctx);
+      }
       case 'Sacrificed': {
         if (ev.type !== 'sacrificed' || !onBf) return false;
         return !P.ValidCard || matches(P.ValidCard, this.subjectOfSnapshot(ev.perm), ctx);
@@ -1018,6 +1230,7 @@ export class Game {
       if (ev.type === 'damage') { triggered.perm = ev.source; triggered.amount = ev.amount; triggered.player = ev.target.kind === 'player' ? ev.target.pid : undefined; if (ev.target.kind === 'perm') triggered.target = ev.target.perm; }
       if (ev.type === 'lifeGained') { triggered.player = ev.player; triggered.amount = ev.amount; }
       if (ev.type === 'drawn' || ev.type === 'phase' || ev.type === 'discard') triggered.player = ev.player;
+      if (ev.type === 'cycled') { triggered.perm = ev.card; triggered.player = ev.player; }
       const src = this.bf.includes(t.perm as Perm) ? (t.perm as Perm) : undefined;
       const tc = t.trig.effect.params.Cost;
       if (tc) {
@@ -1057,6 +1270,11 @@ export class Game {
         const ok = { LE: v <= rhs, GE: v >= rhs, LT: v < rhs, GT: v > rhs, EQ: v === rhs, NE: v !== rhs }[m[1] as 'LE'];
         if (!ok) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
       }
+    }
+    if (P.ConditionPresent?.includes('PromisedGift')) {
+      const promised = !!(ctx.spell?.gift ?? ctx.source?.giftPromised);
+      const want = (P.ConditionCompare ?? 'EQ1') !== 'EQ0';
+      if (promised !== want) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
     }
     if (P.OptionalDecider && !AI.optionalYes(this, eff, ctx)) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
     let targets: Target[] = [];
@@ -1313,9 +1531,17 @@ export class Game {
         break;
       }
       case 'Earthbend': {
+        // Target land you control becomes a 0/0 creature with haste that's still a land, with N +1/+1 counters.
         const n = this.amount(P.Num ?? '1', sub, def);
-        const t = this.makeToken('c_0_0_a_elemental', ctx.p);
-        this.addCounters(t, 'P1P1', n); t.sick = false;
+        const land = AI.chooseEarthbendLand(this, ctx.p);
+        if (!land) break;
+        if (!land.earthbent) {
+          (land as Perm & { frontDef?: CardDef }).frontDef ??= land.def;
+          land.def = { ...land.def, types: [...land.def.types, 'Creature'], power: 0, toughness: 0, keywords: [...land.def.keywords, 'Haste'] };
+          land.earthbent = true;
+        }
+        this.addCounters(land, 'P1P1', n);
+        this.trace(`earthbends ${land.def.name} (+${n})`, ctx.p);
         break;
       }
       default: break; // unsupported / ignored effects are reported by the coverage tool
@@ -1340,6 +1566,7 @@ export class Game {
       switch (part) {
         case 'Self': case 'Card.Self': if (ctx.source && this.bf.includes(ctx.source)) out.push({ kind: 'perm', perm: ctx.source }); break;
         case 'You': out.push({ kind: 'player', pid: ctx.p }); break;
+        case 'Promised': out.push({ kind: 'player', pid: this.opp(ctx.p) }); break;
         case 'Opponent': case 'Player.Opponent': out.push({ kind: 'player', pid: this.opp(ctx.p) }); break;
         case 'Player': out.push({ kind: 'player', pid: 0 }, { kind: 'player', pid: 1 }); break;
         case 'Targeted': case 'ParentTarget': case 'TargetedCard': out.push(...ctx.targets); break;
@@ -1450,7 +1677,9 @@ export class Game {
 
   // ------------------------------------------------------------------ combat
   combat() {
+    this.phase = 'combat';
     const ap = this.active, dp = this.opp(ap);
+    AI.crewVehicles(this, this.players[ap]);
     const attackers = AI.chooseAttackers(this, this.players[ap]);
     if (!attackers.length) return;
     this.players[ap].attackedThisTurn = true;
@@ -1462,6 +1691,7 @@ export class Game {
     this.emit({ type: 'attackersDeclared', player: ap, attackers });
     for (const a of attackers) { if (this.bf.includes(a)) this.emit({ type: 'attacks', perm: a }); }
     if (this.over) return;
+    if (this.players[ap].pool?.length) AI.spendFloatingMana(this, this.players[ap]);
     // tokens created attacking join the attack
     const allAttackers = this.bf.filter(x => x.attacking && x.controller === ap);
     // defender may use instant-speed removal on attackers
@@ -1470,9 +1700,45 @@ export class Game {
     const blocks = AI.chooseBlocks(this, this.players[dp], live);   // Map attacker -> blockers
     for (const [, bs] of blocks) for (const b of bs) { b.blocking = true; this.emit({ type: 'blocks', perm: b }); }
     if (this.opts.trace && blocks.size) this.trace(`  blocks: ${[...blocks].map(([a, bs]) => `${bs.map(b => b.def.name).join('+')} on ${a.def.name}`).join('; ')}`);
-    AI.combatTricks(this, this.players[ap], this.players[dp], live, blocks);
-    this.combatDamage(live, blocks, true);
-    if (!this.over) this.combatDamage(live, blocks, false);
+    const fighting = AI.ninjaStep(this, this.players[ap], live, blocks);
+    AI.combatTricks(this, this.players[ap], this.players[dp], fighting, blocks);
+    this.resolveCombatDamage(fighting, blocks);
+    for (const pl of this.players) pl.pool = [];   // mana empties at end of combat
+  }
+
+  /**
+   * Ninjutsu / Sneak, during the declare blockers step: return an unblocked attacker to hand and
+   * put the ninja onto the battlefield tapped and attacking (ninjutsu), or cast the card for its
+   * sneak cost (a permanent enters tapped and attacking). Returns the new list of attackers.
+   */
+  ninjutsu(pid: number, c: CardInst, returned: Perm, attackers: Perm[]): Perm[] {
+    const p = this.players[pid];
+    const kw = c.def.keywords.find(k => k.startsWith('Ninjutsu') || k.startsWith('Sneak'))!;
+    const [mode, cost] = [kw.split(':')[0], kw.split(':').slice(1).join(':')];
+    if (!p.hand.includes(c) || !this.bf.includes(returned) || !returned.attacking) return attackers;
+    if (mode === 'Ninjutsu') {
+      const mc = parseManaCost(cost);
+      if (!this.payMana(pid, mc.generic, mc.pips, true)) return attackers;
+      this.trace(`ninjutsu: returns ${returned.def.name} to hand, ${c.def.name} enters attacking`, pid);
+      this.leave(returned, 'hand');
+      p.hand.splice(p.hand.indexOf(c), 1);
+      const ninja = this.enter(c, pid, { tapped: true, attacking: true });
+      ninja.attacking = true;
+      return [...attackers.filter(a => a !== returned), ninja];
+    }
+    // Sneak is a cast: pay the sneak cost, and the returned attacker is part of the cost
+    if (!this.canCast(pid, c, { altCost: cost })) return attackers;
+    this.trace(`sneak: returns ${returned.def.name} to hand`, pid);
+    this.leave(returned, 'hand');
+    this.castSpell(pid, c, { altCost: cost, sneak: true });
+    const entered = this.bf.find(x => x.id === c.id);
+    return [...attackers.filter(a => a !== returned), ...(entered?.attacking ? [entered] : [])];
+  }
+
+  /** First-strike damage step (if anyone has it), then regular damage. */
+  resolveCombatDamage(attackers: Perm[], blocks: Map<Perm, Perm[]>) {
+    this.combatDamage(attackers, blocks, true);
+    if (!this.over) this.combatDamage(attackers, blocks, false);
     this.checkSBA();
   }
 
@@ -1515,11 +1781,15 @@ export class Game {
         if (p > 0) dmgEvents.push([b, { kind: 'perm', perm: a }, p]);
       }
     }
-    for (const [src, t, n] of dmgEvents) {
-      if (this.over) return;
-      if (t.kind === 'perm' && !this.bf.includes(t.perm)) continue;
-      this.dealDamage(src, src.controller, t, n, true);
-    }
+    this.damageBatch++;
+    this.inCombatDamage = true;
+    try {
+      for (const [src, t, n] of dmgEvents) {
+        if (this.over) return;
+        if (t.kind === 'perm' && !this.bf.includes(t.perm)) continue;
+        this.dealDamage(src, src.controller, t, n, true);
+      }
+    } finally { this.inCombatDamage = false; }
     this.checkSBA();
   }
 }
@@ -1535,6 +1805,7 @@ export type GEvent =
   | { type: 'lifeGained'; player: number; amount: number }
   | { type: 'drawn'; player: number; nth: number; card: CardInst }
   | { type: 'discard'; player: number; card: CardInst }
-  | { type: 'sacrificed'; perm: Perm };
+  | { type: 'sacrificed'; perm: Perm }
+  | { type: 'cycled'; player: number; card: CardInst };
 
 export type { Ability };

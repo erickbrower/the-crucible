@@ -79,7 +79,11 @@ Deck
 Supported effects include damage, destroy, exile (including "until this leaves"), bounce,
 draw, discard, tokens, pumps, ±1/±1 counters, fight, counterspells (with "unless pays"),
 scry/surveil, mill, sacrifice, tap/untap, auras and equipment, modal spells, transform, explore,
-investigate, amass, connive, ward, prowess, mobilize and sagas. Combat handles flying, reach,
+investigate, amass, connive, ward, prowess, mobilize and sagas.
+
+Keyword mechanics with their own tests (`test/`): equip, kicker, offspring, affinity, convoke,
+cycling and landcycling, flashback, spree, gift, warp, crew, station, ninjutsu, sneak,
+firebending, earthbend, changeling, and speed ("Start your engines!" / max speed). Combat handles flying, reach,
 first and double strike, deathtouch, trample, lifelink, menace, vigilance, defender and
 indestructible.
 
@@ -101,8 +105,9 @@ indestructible.
 - Triggered and activated abilities resolve immediately instead of using the stack, so they
   can't be responded to.
 - Anything listed by `coverage` is ignored or approximated. Examples: adventures and omens
-  (only the creature half), Spree, Warp, Impending, flashback, graveyard-cast abilities,
-  "can't be countered", most replacement effects, and conditional statics (treated as always on).
+  (only the creature half), Impending, Disguise, Plot, Saddle, graveyard-cast abilities other
+  than flashback, "can't be countered", and most replacement effects.
+- Vehicles are only crewed to attack, never to block. Stations are charged after combat.
 - No hidden-information modeling. Hand-peek effects (Deep-Cavern Bat) do nothing.
 - Brawl is modeled as 1v1 with 25 life and +2 commander tax.
 

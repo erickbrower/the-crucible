@@ -1,9 +1,10 @@
 // Heuristic player AI. One policy drives both seats; deck "style" (aggro / midrange / control,
 // inferred from the list) nudges a few decisions such as trading, racing and holding counter mana.
-import type { Ability, CardDef, Color, Effect } from '../cards/model.js';
+import type { Ability, CardDef, Color, Effect, Pip } from '../cards/model.js';
 import { COLORS, cantBeCountered } from '../cards/model.js';
 import type { Ctx, Game, StackItem, Target } from '../engine/game.js';
 import { matches, FilterCtx } from '../engine/filters.js';
+import { parseManaCost } from '../cards/compile.js';
 import type { CardInst, Perm, Player } from '../engine/state.js';
 
 // ------------------------------------------------------------------ steering hints
@@ -334,6 +335,28 @@ export function chooseCharm(g: Game, eff: Effect, ctx: Ctx): Effect[] {
   return scored.sort((a, b) => b.s - a.s).map(x => x.c);
 }
 
+/** Spree: pick the best modes whose extra costs we can pay on top of the base cost. */
+export function chooseSpreeModes(g: Game, pid: number, card: CardInst, generic: number, pips: Pip[]): Effect[] {
+  const ctx: Ctx = { p: pid, card, x: 0, kicked: false, targets: [] };
+  const eff = card.def.spell!.effect;
+  const scored = (eff.choices ?? []).map(c => ({ c, s: effectScore(g, c, ctx) })).filter(x => x.s > 0.5).sort((a, b) => b.s - a.s);
+  const chosen: Effect[] = [];
+  let gen = generic, ps = [...pips];
+  for (const { c } of scored) {
+    const mc = parseManaCost(c.params.ModeCost);
+    if (!g.payMana(pid, gen + mc.generic, [...ps, ...mc.pips], false)) continue;
+    chosen.push(c); gen += mc.generic; ps = [...ps, ...mc.pips];
+  }
+  return chosen;
+}
+
+/** Promise the gift unless it's something big (an extra turn, a Rhystic Study). */
+export function promiseGift(g: Game, pid: number, card: CardInst): boolean {
+  void g; void pid;
+  const desc = card.def.svars.GiftAbility?.match(/GiftDescription\$ ([^|]+)/)?.[1]?.trim() ?? '';
+  return !/extra turn|Rhystic/i.test(desc);
+}
+
 export function optionalYes(g: Game, eff: Effect, ctx: Ctx): boolean {
   const P = eff.params;
   if (eff.api === 'Sacrifice' && (!P.Defined || P.Defined === 'You' || P.Defined === 'Self')) return false;
@@ -436,12 +459,21 @@ export function chooseAuraHost(g: Game, perm: Perm): Perm | undefined {
   return auraHostFor(g, perm.def, perm.controller, perm.id);
 }
 
-interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm }
+interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm; flashback?: boolean; warp?: boolean; fromExile?: boolean }
 
-function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, window: 'main1' | 'main2' | 'instant'): Plan | undefined {
+function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, window: 'main1' | 'main2' | 'instant', flashback = false): Plan | undefined {
   const d = card.def;
   if (isLandCard(card)) return undefined;
   if (window === 'instant' && !isInstantSpeed(d)) return undefined;
+  if (flashback) {
+    const altCost = g.keywordCost(card, 'Flashback');
+    if (altCost === undefined || d.cost.x || !d.spell || !g.canCast(p.id, card, { altCost })) return undefined;
+    if (d.types.includes('Instant') && window !== 'instant' && p.style === 'control') return undefined;
+    const score = effectScore(g, d.spell.effect, { p: p.id, card, x: 0, kicked: false, targets: [] });
+    const harmfulTarget = isHarmful(d.spell.effect) && d.spell.effect.params.ValidTgts !== undefined;
+    if (score <= (harmfulTarget ? 1.5 : 0.5)) return undefined;
+    return { score: score + 0.5, x: 0, kicked: false, flashback: true };   // free card: slightly preferred
+  }
   let x = 0;
   if (d.cost.x) {
     const base = g.spellCost(p.id, card, { fromCommand });
@@ -489,7 +521,7 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
 function castAction(g: Game, p: Player, card: CardInst, fromCommand: boolean, plan: Plan): Action {
   return {
     score: plan.score, label: `cast ${card.def.name}`,
-    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt }),
+    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt, flashback: plan.flashback, warp: plan.warp, fromExile: plan.fromExile }),
   };
 }
 
@@ -498,6 +530,7 @@ const activatedThisWindow = new Set<string>();
 function costPayable(g: Game, p: Player, perm: Perm, ab: Ability): boolean {
   const c = ab.cost;
   if (!c.supported) return false;
+  if (ab.condition === 'MaxSpeed' && (p.speed ?? 0) < 4) return false;
   if (c.mana.x) return false;
   if (c.tap && (perm.tapped || (isCreature(perm) && perm.sick && !g.has(perm, 'Haste')))) return false;
   if (c.payLife && p.life <= c.payLife + 2) return false;
@@ -605,6 +638,78 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
   return acts;
 }
 
+/**
+ * Cycling: landcycle when we're short on lands; cycle a card we can't cast any time soon,
+ * or extra lands once we have plenty. Cards with a "when you cycle" trigger are cycled more readily.
+ */
+function cycleActions(g: Game, p: Player): Action[] {
+  const lands = g.bf.filter(x => x.controller === p.id && x.def.types.includes('Land')).length;
+  const landsInHand = p.hand.filter(isLandCard).length;
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const landcycle = c.def.keywords.some(k => k.startsWith('TypeCycling:'));
+    const cost = g.keywordCost(c, landcycle ? 'TypeCycling' : 'Cycling');
+    if (cost === undefined) continue;
+    let score = 0;
+    if (landcycle) {
+      if (landsInHand === 0 && lands < 7) score = 4.5;
+      else if (c.def.mv > lands + 2 && lands < 6) score = 3;
+    } else {
+      if (isLandCard(c)) score = lands >= 6 && landsInHand > 1 ? 3 : 0;
+      else if (c.def.mv > lands + 2) score = 2.5;
+    }
+    if (c.def.triggers.some(t => t.mode === 'Cycled')) score += 1.5;
+    if (score <= 0) continue;
+    const mc = g.spellCost(p.id, c, { altCost: cost });
+    if (!g.payMana(p.id, mc.generic, mc.pips, false)) continue;
+    acts.push({ score, label: `cycle ${c.def.name}`, run: () => g.cycle(p.id, c) });
+  }
+  return acts;
+}
+
+/**
+ * Warp: cast a creature for its (cheaper) warp cost when we can't afford it normally this turn.
+ * It's exiled at end of turn and comes back later, so it's worth it for an enters trigger or a hasty hit.
+ */
+function warpActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window === 'instant') return [];
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const cost = g.keywordCost(c, 'Warp');
+    if (cost === undefined || /X/.test(cost) || g.canCast(p.id, c)) continue;
+    if (!g.canCast(p.id, c, { altCost: cost })) continue;
+    const etb = c.def.triggers.some(t => (t.mode === 'ChangesZone' && t.params.Destination === 'Battlefield' && /Self/.test(t.params.ValidCard ?? '')));
+    const hasty = c.def.keywords.includes('Haste') && window === 'main1';
+    let score = (etb ? 3 : 0) + (hasty ? (c.def.power ?? 0) * 0.7 : 0);
+    if (!c.def.types.includes('Creature')) score = etb ? 3 : 0;
+    if (score < 1.5) continue;
+    acts.push({ score, label: `warp ${c.def.name}`, run: () => g.castSpell(p.id, c, { warp: true }) });
+  }
+  return acts;
+}
+
+/**
+ * Station (sorcery speed, so after combat): tap creatures that didn't attack to charge a Spacecraft
+ * or Planet, when we're not under pressure or it finishes the job this turn.
+ */
+function stationActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window !== 'main2') return [];
+  const acts: Action[] = [];
+  const theirPower = myCreatures(g, g.opp(p.id)).reduce((a, x) => a + Math.max(0, g.statsOf(x).power), 0);
+  for (const st of g.bf.filter(x => x.controller === p.id && x.def.keywords.some(k => k.startsWith('Station')))) {
+    const goal = parseInt(st.def.keywords.find(k => k.startsWith('Station'))!.split(':')[1] ?? '0', 10) || 0;
+    const have = st.counters.CHARGE ?? 0;
+    if (have >= goal) continue;
+    const crew = myCreatures(g, p.id).filter(c => c !== st && !c.tapped && g.statsOf(c).power > 0)
+      .sort((a, b) => g.statsOf(b).power - g.statsOf(a).power)[0];
+    if (!crew) continue;
+    const finishes = have + g.statsOf(crew).power >= goal;
+    if (!finishes && p.life <= theirPower * 2) continue;
+    acts.push({ score: finishes ? 3 : 1.5, label: `station ${st.def.name}`, run: () => g.station(st, crew) });
+  }
+  return acts;
+}
+
 function runActions(g: Game, p: Player, gather: () => Action[]) {
   for (let guard = 0; guard < 30 && !g.over; guard++) {
     const acts = gather().sort((a, b) => b.score - a.score);
@@ -631,9 +736,100 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       if (reserve && avail - cost < reserve && !(behind && isCreature(card))) continue;
       acts.push(castAction(g, p, card, fromCommand, plan));
     }
+    for (const card of p.graveyard) {
+      const plan = planSpell(g, p, card, false, window, true);
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
+    // warped cards in exile can be cast normally on a later turn
+    for (const w of p.warpExile ?? []) {
+      if (w.turn >= g.turn) continue;
+      const plan = planSpell(g, p, w.card, false, window);
+      if (plan) acts.push(castAction(g, p, w.card, false, { ...plan, fromExile: true }));
+    }
+    acts.push(...warpActions(g, p, window));
+    acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
+    acts.push(...cycleActions(g, p));
     return acts;
   });
+}
+
+/** Use mana that only lasts until end of combat (firebending): instants, flash and instant-speed abilities. */
+export function spendFloatingMana(g: Game, p: Player) {
+  runActions(g, p, () => {
+    if (!p.pool?.length) return [];
+    const acts: Action[] = [];
+    for (const card of p.hand) {
+      const plan = planSpell(g, p, card, false, 'instant');
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
+    acts.push(...abilityActions(g, p, 'instant'));
+    return acts;
+  });
+}
+
+/**
+ * Ninjutsu / Sneak: swap the least valuable unblocked attacker for something better from hand.
+ * Ninjas and sneak creatures enter attacking; a sneak noncreature spell is cast if it's worth casting now.
+ */
+export function ninjaStep(g: Game, p: Player, attackers: Perm[], blocks: Map<Perm, Perm[]>): Perm[] {
+  let cur = attackers;
+  for (let guard = 0; guard < 3; guard++) {
+    const unblocked = cur.filter(a => g.bf.includes(a) && !(blocks.get(a)?.length));
+    if (!unblocked.length) break;
+    const back = [...unblocked].sort((a, b) => permValue(g, a) - permValue(g, b))[0];
+    let best: { c: CardInst; v: number } | undefined;
+    for (const c of p.hand) {
+      const kw = c.def.keywords.find(k => k.startsWith('Ninjutsu') || k.startsWith('Sneak'));
+      if (!kw) continue;
+      const cost = kw.split(':').slice(1).join(':');
+      const mc = g.spellCost(p.id, c, { altCost: cost });
+      if (!g.payMana(p.id, mc.generic, mc.pips, false)) continue;
+      let v: number;
+      if (isCreature(c)) {
+        // the ninja deals its damage now and stays; the returned creature can be recast later
+        v = cardValue(g, p, c) + Math.max(0, (c.def.power ?? 0) - g.statsOf(back).power) * 0.5 - permValue(g, back) * 0.6;
+      } else {
+        if (!c.def.spell) continue;
+        v = effectScore(g, c.def.spell.effect, { p: p.id, card: c, x: 0, kicked: false, targets: [] }) - permValue(g, back) * 0.6;
+        if (v < 2) continue;
+      }
+      if (v > 0.5 && (!best || v > best.v)) best = { c, v };
+    }
+    if (!best) break;
+    const next = g.ninjutsu(p.id, best.c, back, cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
+}
+
+/**
+ * Crew vehicles before attacking: tap the least useful creatures (summoning sick ones cost nothing)
+ * when the vehicle hits harder than the crew would.
+ */
+export function crewVehicles(g: Game, p: Player) {
+  for (const v of g.bf.filter(x => x.controller === p.id && !x.tapped && !x.baseDef && x.def.keywords.some(k => k.startsWith('Crew:')))) {
+    if (v.sick && !g.has(v, 'Haste')) continue;
+    const n = parseInt(v.def.keywords.find(k => k.startsWith('Crew:'))!.split(':')[1], 10);
+    const canAttack = (c: Perm) => !c.sick || g.has(c, 'Haste');
+    const pool = myCreatures(g, p.id).filter(c => !c.tapped && c !== v && g.statsOf(c).power > 0)
+      .sort((a, b) => (canAttack(a) ? g.statsOf(a).power : 0) - (canAttack(b) ? g.statsOf(b).power : 0) || g.statsOf(a).power - g.statsOf(b).power);
+    const crew: Perm[] = [];
+    let total = 0;
+    for (const c of pool) { if (total >= n) break; crew.push(c); total += g.statsOf(c).power; }
+    if (total < n) continue;
+    const lost = crew.filter(canAttack).reduce((a, c) => a + g.statsOf(c).power, 0);
+    if ((v.def.power ?? 0) > lost) g.crew(v, crew);
+  }
+}
+
+/** Earthbend target: stack onto a land that's already a creature, else an untapped basic (it has haste and can attack). */
+export function chooseEarthbendLand(g: Game, pid: number): Perm | undefined {
+  const lands = g.bf.filter(x => x.controller === pid && x.def.types.includes('Land'));
+  return lands.find(x => x.earthbent)
+    ?? lands.filter(x => !x.tapped).sort((a, b) => Number(b.def.supertypes.includes('Basic')) - Number(a.def.supertypes.includes('Basic')))[0]
+    ?? lands[0];
 }
 
 /** The non-active player's chance to use instants, flash and abilities at the end of the opponent's turn. */
@@ -644,7 +840,12 @@ export function endOfTurnWindow(g: Game, p: Player) {
       const plan = planSpell(g, p, card, false, 'instant');
       if (plan) acts.push(castAction(g, p, card, false, plan));
     }
+    for (const card of p.graveyard) {
+      const plan = planSpell(g, p, card, false, 'instant', true);
+      if (plan) acts.push(castAction(g, p, card, false, plan));
+    }
     acts.push(...abilityActions(g, p, 'instant'));
+    acts.push(...cycleActions(g, p));
     return acts;
   });
 }
@@ -818,7 +1019,7 @@ export function chooseAttackers(g: Game, p: Player): Perm[] {
   const chosen: Perm[] = [];
   for (const a of mine) {
     const possible = blockers.filter(b => canBlock(g, b, a));
-    if (!possible.length || (g.has(a, 'Menace') && possible.length < 2)) { chosen.push(a); continue; }
+    if (possible.length < g.minBlockers(a)) { chosen.push(a); continue; }
     let ok = true;
     for (const b of possible) {
       const r = duel(g, a, b);
@@ -858,7 +1059,7 @@ export function chooseBlocks(g: Game, defender: Player, attackers: Perm[]): Map<
   let incoming = attackers.reduce((a, x) => a + pw(x), 0);
   const sorted = [...attackers].sort((a, b) => pw(b) - pw(a));
   for (const a of sorted) {
-    if (g.has(a, 'Menace')) continue;
+    if (g.minBlockers(a) > 1) continue;
     const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).map(b => ({ b, r: duel(g, a, b), v: permValue(g, b) }));
     if (!opts.length) continue;
     const good = opts.filter(o => o.r.blockerKills && !o.r.blockerDies).sort((x, y) => x.v - y.v)[0];
@@ -875,7 +1076,8 @@ export function chooseBlocks(g: Game, defender: Player, attackers: Perm[]): Map<
   for (const a of sorted) {
     if (incoming < defender.life) break;
     if (blocks.has(a)) continue;
-    const need = g.has(a, 'Menace') ? 2 : 1;
+    const need = g.minBlockers(a);
+    if (need > g.maxBlockers(a)) continue;
     const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).sort((x, y) => permValue(g, x) - permValue(g, y));
     if (opts.length < need) continue;
     const bs = opts.slice(0, need);

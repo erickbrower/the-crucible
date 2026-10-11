@@ -18,12 +18,12 @@ const IGNORED_APIS = new Set(['StoreSVar', 'Effect', 'Animate', 'GenericChoice',
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
-  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited',
+  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled',
 ]);
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -156,10 +156,12 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   const keywords: string[] = [];
   let kicker: ManaCost | undefined, affinity: string | undefined, altAdditional: CardDef['altAdditional'];
   let chapters: Effect[] | undefined;
+  let offspring: boolean | undefined;
   for (const k of face.all('K')) {
     const base = k.split(':')[0];
     keywords.push(k);
     if (base === 'Kicker') kicker = parseManaCost(k.split(':')[1]);
+    if (base === 'Offspring') { kicker = parseManaCost(k.split(':')[1]); offspring = true; }
     if (base === 'Affinity') affinity = k.split(':')[1];
     if (base === 'Chapter') {
       // K:Chapter:4:DBA,DBB,DBC,DBD - one SVar per chapter
@@ -191,6 +193,13 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       });
     }
   }
+  // Equip N (keyword form): a sorcery-speed "attach to target creature you control" ability
+  for (const k of face.all('K').filter(k => k.startsWith('Equip:'))) {
+    const [, cost, valid] = k.split(':');
+    const c = parseCost(cost);
+    if (!c.supported) { notes.push(`equip cost "${cost}" ignored`); continue; }
+    abilities.push({ kind: 'activated', effect: { api: 'Attach', params: { ValidTgts: valid ?? 'Creature.YouCtrl' } }, cost: c, sorcerySpeed: true, description: `Equip ${cost}` });
+  }
   const triggers: Trigger[] = [];
   for (const t of face.all('T')) {
     const params = parseParams(t);
@@ -203,13 +212,30 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   const statics: StaticAbility[] = [];
   for (const s of face.all('S')) {
     const params = parseParams(s);
+    // "Max speed — ..." grants an ability, trigger or static to itself while your speed is 4
+    if (params.Condition === 'MaxSpeed' && params.AffectedDefined === 'Self' && !params.EffectZone) {
+      if (params.AddStaticAbility) statics.push({ mode: 'Continuous', params: { ...parseParams(face.svars[params.AddStaticAbility] ?? ''), Condition: 'MaxSpeed' } });
+      if (params.AddTrigger) {
+        const tp: Record<string, string> = { ...parseParams(face.svars[params.AddTrigger] ?? ''), Condition: 'MaxSpeed' };
+        const exec = tp.Execute ? face.svars[tp.Execute] : undefined;
+        if (!SUPPORTED_TRIGGERS.has(tp.Mode)) notes.push(`trigger "${tp.Mode}" ignored`);
+        triggers.push({ mode: tp.Mode, params: tp, effect: exec ? compileEffect(face, exec, notes) : undefined });
+      }
+      if (params.AddAbility) {
+        const ap = parseParams(face.svars[params.AddAbility] ?? '');
+        const eff = compileEffect(face, face.svars[params.AddAbility], notes);
+        abilities.push({ kind: eff.api === 'Mana' ? 'mana' : 'activated', effect: eff, cost: parseCost(ap.Cost), condition: 'MaxSpeed',
+          sorcerySpeed: ap.SorcerySpeed === 'True', description: ap.SpellDescription });
+      }
+      if (params.AddReplacementEffect) notes.push('max speed replacement ignored');
+      continue;
+    }
     statics.push({ mode: params.Mode, params });
     const m = params.Mode;
     if (m === 'Continuous') {
-      if (params.IsPresent && params.PresentZone && params.PresentZone !== 'Battlefield') notes.push('conditional static treated as always on');
       if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
-    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack'].includes(m)) {
+    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {
       notes.push(`static "${m}" ignored`);
     }
   }
@@ -225,7 +251,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     colors: colorsOf(face, cost), power, toughness, ptStar,
     loyalty: face.get('Loyalty') ? parseInt(face.get('Loyalty')!, 10) || 0 : undefined,
     keywords, spell, abilities, triggers, statics, replacements, svars: face.svars,
-    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, affinity, altAdditional, chapters,
+    oracle: (face.get('Oracle') ?? '').replace(/\\n/g, '\n'), notes, kicker, offspring, affinity, altAdditional, chapters,
   };
   if (types.includes('Land')) def.land = compileLand(face, abilities, subtypes);
   if (opts.token) def.notes = notes;
@@ -279,4 +305,11 @@ export function loadToken(script: string): CardDef {
 export function coverage(def: CardDef): { ok: boolean; notes: string[] } {
   const notes = [...new Set(def.notes)];
   return { ok: notes.length === 0, notes };
+}
+
+/** The effect an opponent gets when a gift is promised (SVar GiftAbility). */
+export function compileGift(def: CardDef): Effect {
+  const src = def.svars.GiftAbility ?? '';
+  const face = { name: def.name, svars: def.svars, get: () => undefined, all: () => [] } as unknown as RawFace;
+  return compileEffect(face, src, []);
 }
