@@ -507,6 +507,7 @@ const activatedThisWindow = new Set<string>();
 function costPayable(g: Game, p: Player, perm: Perm, ab: Ability): boolean {
   const c = ab.cost;
   if (!c.supported) return false;
+  if (ab.condition === 'MaxSpeed' && (p.speed ?? 0) < 4) return false;
   if (c.mana.x) return false;
   if (c.tap && (perm.tapped || (isCreature(perm) && perm.sick && !g.has(perm, 'Haste')))) return false;
   if (c.payLife && p.life <= c.payLife + 2) return false;

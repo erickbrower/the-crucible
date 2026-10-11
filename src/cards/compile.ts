@@ -23,7 +23,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -203,6 +203,24 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   const statics: StaticAbility[] = [];
   for (const s of face.all('S')) {
     const params = parseParams(s);
+    // "Max speed — ..." grants an ability, trigger or static to itself while your speed is 4
+    if (params.Condition === 'MaxSpeed' && params.AffectedDefined === 'Self' && !params.EffectZone) {
+      if (params.AddStaticAbility) statics.push({ mode: 'Continuous', params: { ...parseParams(face.svars[params.AddStaticAbility] ?? ''), Condition: 'MaxSpeed' } });
+      if (params.AddTrigger) {
+        const tp: Record<string, string> = { ...parseParams(face.svars[params.AddTrigger] ?? ''), Condition: 'MaxSpeed' };
+        const exec = tp.Execute ? face.svars[tp.Execute] : undefined;
+        if (!SUPPORTED_TRIGGERS.has(tp.Mode)) notes.push(`trigger "${tp.Mode}" ignored`);
+        triggers.push({ mode: tp.Mode, params: tp, effect: exec ? compileEffect(face, exec, notes) : undefined });
+      }
+      if (params.AddAbility) {
+        const ap = parseParams(face.svars[params.AddAbility] ?? '');
+        const eff = compileEffect(face, face.svars[params.AddAbility], notes);
+        abilities.push({ kind: eff.api === 'Mana' ? 'mana' : 'activated', effect: eff, cost: parseCost(ap.Cost), condition: 'MaxSpeed',
+          sorcerySpeed: ap.SorcerySpeed === 'True', description: ap.SpellDescription });
+      }
+      if (params.AddReplacementEffect) notes.push('max speed replacement ignored');
+      continue;
+    }
     statics.push({ mode: params.Mode, params });
     const m = params.Mode;
     if (m === 'Continuous') {

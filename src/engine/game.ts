@@ -281,6 +281,7 @@ export class Game {
   private condDepth = 0;
   /** "As long as ..." conditions on a static: CheckSVar/SVarCompare and IsPresent/PresentCompare. */
   staticConditionMet(src: Perm | CardInst, params: Record<string, string>, controller = (src as Perm).controller ?? src.owner): boolean {
+    if (params.Condition === 'MaxSpeed' && (this.players[controller].speed ?? 0) < 4) return false;
     if (!params.CheckSVar && !params.IsPresent) return true;
     if (this.condDepth > 0) return true;            // avoid recursion through statsOf
     this.condDepth++;
@@ -398,6 +399,7 @@ export class Game {
     if ((m = expr.match(/^Count\$Compare .*\.(\d+)\.(\d+)$/))) return +m[2];
     if (/^Count\$xPaid/.test(expr)) return ctx.x;
     if (/^Count\$YourLifeTotal/.test(expr)) return me.life;
+    if (/^Count\$YourSpeed/.test(expr)) return me.speed ?? 0;
     if (/^Count\$(LifeYouGainedThisTurn|YourLifeGainedThisTurn)/.test(expr)) return me.lifeGainedThisTurn;
     if (/^Count\$CardsInYourHand/.test(expr)) return me.hand.length;
     if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
@@ -468,7 +470,8 @@ export class Game {
         units.push({ group: g++, perm, colors, land: true, treasure: false, any: false });
         continue;
       }
-      const ma = d.abilities.find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0);
+      const ma = d.abilities.find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0
+        && (a.condition !== 'MaxSpeed' || (p.speed ?? 0) >= 4));
       if (!ma) continue;
       const prod = ma.effect.params.Produced ?? 'C';
       let colors: Color[] = [];
@@ -566,7 +569,7 @@ export class Game {
         if (st.mode !== 'ReduceCost' || st.params.Activator === 'Opponent') continue;
         if (st.params.ValidCard && !matches(st.params.ValidCard, this.subjectOf(c, pid), this.ctxFor(src))) continue;
         if (st.params.Type && !/Spell/.test(st.params.Type)) continue;
-        const amt = parseInt(st.params.Amount ?? '1', 10) || 1;
+        const amt = this.amount(st.params.Amount ?? '1', { p: pid, source: src, x: 0, kicked: false, targets: [] }, src.def);
         generic = Math.max(0, generic - amt);
       }
     }
@@ -803,6 +806,7 @@ export class Game {
       perm.counters[om[2].startsWith('+') ? 'P1P1' : 'M1M1'] = n;
     }
     this.bf.push(perm);
+    if (c.def.keywords.includes('Start your engines') && !this.players[controller].speed) this.players[controller].speed = 1;
     // legend rule
     if (c.def.supertypes.includes('Legendary')) {
       const dup = this.bf.filter(x => x !== perm && x.controller === controller && x.def.name === perm.def.name);
@@ -901,8 +905,17 @@ export class Game {
     this.emit({ type: 'lifeGained', player: pid, amount: amt });
   }
 
+  /** Speed goes up once on each of your turns when an opponent loses life. */
+  private speedUp(loser: number) {
+    const me = this.players[this.opp(loser)];
+    if (this.active !== me.id || !me.speed || me.speed >= 4 || me.speedTurn === this.turn) return;
+    me.speed++; me.speedTurn = this.turn;
+    this.trace(`speed ${me.speed}${me.speed === 4 ? ' (max speed)' : ''}`, me.id);
+  }
+
   loseLife(pid: number, n: number) {
     if (n <= 0) return;
+    this.speedUp(pid);
     this.players[pid].life -= n;
     if (this.players[pid].life <= 0) this.lose(pid, 'life');
   }
@@ -924,6 +937,7 @@ export class Game {
     const srcPerm = source && this.bf.includes(source as Perm) ? (source as Perm) : undefined;
     const kws = srcPerm ? this.statsOf(srcPerm).keywords : source?.def.keywords.map(k => k.split(':')[0]) ?? [];
     if (target.kind === 'player') {
+      this.speedUp(target.pid);
       this.players[target.pid].life -= amount;
       this.stats.damage[controller] += amount;
       if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');

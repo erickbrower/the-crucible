@@ -60,6 +60,8 @@ export interface Player {
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;
+  speed?: number;           // Start your engines! (0/undefined = no speed; max 4)
+  speedTurn?: number;       // turn the speed last increased
   pool?: Color[];           // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }

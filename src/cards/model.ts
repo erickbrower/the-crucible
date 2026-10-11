@@ -42,6 +42,7 @@ export interface Ability {
   ultimate?: boolean;
   sorcerySpeed?: boolean;
   description?: string;
+  condition?: string;     // e.g. 'MaxSpeed': only usable while the condition holds
 }
 
 export interface Trigger {
