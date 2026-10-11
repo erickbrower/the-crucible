@@ -650,6 +650,42 @@ export function spendFloatingMana(g: Game, p: Player) {
   });
 }
 
+/**
+ * Ninjutsu / Sneak: swap the least valuable unblocked attacker for something better from hand.
+ * Ninjas and sneak creatures enter attacking; a sneak noncreature spell is cast if it's worth casting now.
+ */
+export function ninjaStep(g: Game, p: Player, attackers: Perm[], blocks: Map<Perm, Perm[]>): Perm[] {
+  let cur = attackers;
+  for (let guard = 0; guard < 3; guard++) {
+    const unblocked = cur.filter(a => g.bf.includes(a) && !(blocks.get(a)?.length));
+    if (!unblocked.length) break;
+    const back = [...unblocked].sort((a, b) => permValue(g, a) - permValue(g, b))[0];
+    let best: { c: CardInst; v: number } | undefined;
+    for (const c of p.hand) {
+      const kw = c.def.keywords.find(k => k.startsWith('Ninjutsu') || k.startsWith('Sneak'));
+      if (!kw) continue;
+      const cost = kw.split(':').slice(1).join(':');
+      const mc = g.spellCost(p.id, c, { altCost: cost });
+      if (!g.payMana(p.id, mc.generic, mc.pips, false)) continue;
+      let v: number;
+      if (isCreature(c)) {
+        // the ninja deals its damage now and stays; the returned creature can be recast later
+        v = cardValue(g, p, c) + Math.max(0, (c.def.power ?? 0) - g.statsOf(back).power) * 0.5 - permValue(g, back) * 0.6;
+      } else {
+        if (!c.def.spell) continue;
+        v = effectScore(g, c.def.spell.effect, { p: p.id, card: c, x: 0, kicked: false, targets: [] }) - permValue(g, back) * 0.6;
+        if (v < 2) continue;
+      }
+      if (v > 0.5 && (!best || v > best.v)) best = { c, v };
+    }
+    if (!best) break;
+    const next = g.ninjutsu(p.id, best.c, back, cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
+}
+
 /** Earthbend target: stack onto a land that's already a creature, else an untapped basic (it has haste and can attack). */
 export function chooseEarthbendLand(g: Game, pid: number): Perm | undefined {
   const lands = g.bf.filter(x => x.controller === pid && x.def.types.includes('Land'));

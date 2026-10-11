@@ -2,7 +2,7 @@
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
-import { loadToken, parseCost } from '../cards/compile.js';
+import { loadToken, parseCost, parseManaCost } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
 import * as AI from '../ai/policy.js';
@@ -26,6 +26,7 @@ export interface SpellStep { effect: Effect; targets?: Target[] }
 
 export interface StackItem {
   card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
+  sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
   countered?: boolean;
   plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
 }
@@ -296,7 +297,7 @@ export class Game {
         for (const zone of (params.PresentZone ?? 'Battlefield').split(',')) {
           if (zone === 'Battlefield') n += this.bf.filter(x => matches(params.IsPresent, this.subjectOf(x), fctx)).length;
           else {
-            const key = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile', Library: 'library' } as Record<string, 'graveyard'>)[zone];
+            const key = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile', Library: 'library' } as Record<string, 'graveyard' | 'hand' | 'exile' | 'library'>)[zone];
             if (key) for (const pl of this.players) n += pl[key].filter(c => matches(params.IsPresent, this.subjectOf(c, pl.id), fctx)).length;
           }
         }
@@ -541,9 +542,10 @@ export class Game {
 
   availableMana(pid: number) { return this.manaUnits(pid).length; }
 
-  spellCost(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean } = {}) {
-    let generic = c.def.cost.generic + (opts.x ?? 0) * Math.max(1, c.def.cost.x);
-    const pips = [...c.def.cost.pips];
+  spellCost(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
+    const base = opts.altCost !== undefined ? parseManaCost(opts.altCost) : c.def.cost;
+    let generic = base.generic + (opts.x ?? 0) * Math.max(1, c.def.cost.x);
+    const pips = [...base.pips];
     if (opts.kicked && c.def.kicker) { generic += c.def.kicker.generic; pips.push(...c.def.kicker.pips); }
     if (opts.fromCommand) generic += this.players[pid].commanderTax;
     if (c.def.affinity) {
@@ -565,7 +567,7 @@ export class Game {
     return { generic, pips };
   }
 
-  canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean } = {}) {
+  canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
     return this.payMana(pid, generic, pips, false);
   }
@@ -600,7 +602,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ casting
-  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm } = {}): boolean {
+  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean } = {}): boolean {
     const p = this.players[pid];
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
@@ -609,11 +611,11 @@ export class Game {
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++;
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand };
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
@@ -723,7 +725,7 @@ export class Game {
   resolveSpell(item: StackItem) {
     const c = item.card; const pid = item.controller; const p = this.players[pid];
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
-      const perm = this.enter(c, pid, {});
+      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {});
       if (c.def.keywords.some(k => k.startsWith('Enchant'))) {
         const host = AI.chooseAuraHost(this, perm);
         if (host) perm.attachedTo = host.id; else this.leave(perm, 'graveyard');
@@ -1514,6 +1516,7 @@ export class Game {
 
   // ------------------------------------------------------------------ combat
   combat() {
+    this.phase = 'combat';
     const ap = this.active, dp = this.opp(ap);
     const attackers = AI.chooseAttackers(this, this.players[ap]);
     if (!attackers.length) return;
@@ -1535,9 +1538,39 @@ export class Game {
     const blocks = AI.chooseBlocks(this, this.players[dp], live);   // Map attacker -> blockers
     for (const [, bs] of blocks) for (const b of bs) { b.blocking = true; this.emit({ type: 'blocks', perm: b }); }
     if (this.opts.trace && blocks.size) this.trace(`  blocks: ${[...blocks].map(([a, bs]) => `${bs.map(b => b.def.name).join('+')} on ${a.def.name}`).join('; ')}`);
-    AI.combatTricks(this, this.players[ap], this.players[dp], live, blocks);
-    this.resolveCombatDamage(live, blocks);
+    const fighting = AI.ninjaStep(this, this.players[ap], live, blocks);
+    AI.combatTricks(this, this.players[ap], this.players[dp], fighting, blocks);
+    this.resolveCombatDamage(fighting, blocks);
     for (const pl of this.players) pl.pool = [];   // mana empties at end of combat
+  }
+
+  /**
+   * Ninjutsu / Sneak, during the declare blockers step: return an unblocked attacker to hand and
+   * put the ninja onto the battlefield tapped and attacking (ninjutsu), or cast the card for its
+   * sneak cost (a permanent enters tapped and attacking). Returns the new list of attackers.
+   */
+  ninjutsu(pid: number, c: CardInst, returned: Perm, attackers: Perm[]): Perm[] {
+    const p = this.players[pid];
+    const kw = c.def.keywords.find(k => k.startsWith('Ninjutsu') || k.startsWith('Sneak'))!;
+    const [mode, cost] = [kw.split(':')[0], kw.split(':').slice(1).join(':')];
+    if (!p.hand.includes(c) || !this.bf.includes(returned) || !returned.attacking) return attackers;
+    if (mode === 'Ninjutsu') {
+      const mc = parseManaCost(cost);
+      if (!this.payMana(pid, mc.generic, mc.pips, true)) return attackers;
+      this.trace(`ninjutsu: returns ${returned.def.name} to hand, ${c.def.name} enters attacking`, pid);
+      this.leave(returned, 'hand');
+      p.hand.splice(p.hand.indexOf(c), 1);
+      const ninja = this.enter(c, pid, { tapped: true, attacking: true });
+      ninja.attacking = true;
+      return [...attackers.filter(a => a !== returned), ninja];
+    }
+    // Sneak is a cast: pay the sneak cost, and the returned attacker is part of the cost
+    if (!this.canCast(pid, c, { altCost: cost })) return attackers;
+    this.trace(`sneak: returns ${returned.def.name} to hand`, pid);
+    this.leave(returned, 'hand');
+    this.castSpell(pid, c, { altCost: cost, sneak: true });
+    const entered = this.bf.find(x => x.id === c.id);
+    return [...attackers.filter(a => a !== returned), ...(entered?.attacking ? [entered] : [])];
   }
 
   /** First-strike damage step (if anyone has it), then regular damage. */
