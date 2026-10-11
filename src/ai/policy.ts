@@ -818,7 +818,7 @@ export function chooseAttackers(g: Game, p: Player): Perm[] {
   const chosen: Perm[] = [];
   for (const a of mine) {
     const possible = blockers.filter(b => canBlock(g, b, a));
-    if (!possible.length || (g.has(a, 'Menace') && possible.length < 2)) { chosen.push(a); continue; }
+    if (possible.length < g.minBlockers(a)) { chosen.push(a); continue; }
     let ok = true;
     for (const b of possible) {
       const r = duel(g, a, b);
@@ -858,7 +858,7 @@ export function chooseBlocks(g: Game, defender: Player, attackers: Perm[]): Map<
   let incoming = attackers.reduce((a, x) => a + pw(x), 0);
   const sorted = [...attackers].sort((a, b) => pw(b) - pw(a));
   for (const a of sorted) {
-    if (g.has(a, 'Menace')) continue;
+    if (g.minBlockers(a) > 1) continue;
     const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).map(b => ({ b, r: duel(g, a, b), v: permValue(g, b) }));
     if (!opts.length) continue;
     const good = opts.filter(o => o.r.blockerKills && !o.r.blockerDies).sort((x, y) => x.v - y.v)[0];
@@ -875,7 +875,8 @@ export function chooseBlocks(g: Game, defender: Player, attackers: Perm[]): Map<
   for (const a of sorted) {
     if (incoming < defender.life) break;
     if (blocks.has(a)) continue;
-    const need = g.has(a, 'Menace') ? 2 : 1;
+    const need = g.minBlockers(a);
+    if (need > g.maxBlockers(a)) continue;
     const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).sort((x, y) => permValue(g, x) - permValue(g, y));
     if (opts.length < need) continue;
     const bs = opts.slice(0, need);

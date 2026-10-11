@@ -209,7 +209,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       if (params.IsPresent && params.PresentZone && params.PresentZone !== 'Battlefield') notes.push('conditional static treated as always on');
       if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
-    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack'].includes(m)) {
+    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {
       notes.push(`static "${m}" ignored`);
     }
   }

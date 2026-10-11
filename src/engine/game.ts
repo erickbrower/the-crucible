@@ -328,6 +328,22 @@ export class Game {
     if (this.has(perm, 'Unblockable') || this.has(perm, "Can't be blocked")) return true;
     return perm.def.statics.some(s => s.mode === 'CantBlockBy' && (s.params.ValidAttacker ?? '').includes('Self') && !s.params.ValidBlocker);
   }
+  /** Fewest creatures that can block this attacker (menace = 2, "except by three or more" = 3). */
+  minBlockers(perm: Perm) {
+    let n = this.has(perm, 'Menace') ? 2 : 1;
+    for (const src of this.bf) for (const s of src.def.statics) {
+      if (s.mode === 'MinMaxBlocker' && s.params.Min && this.staticHits(src, s.params, perm)) n = Math.max(n, +s.params.Min);
+    }
+    return n;
+  }
+  /** Most creatures that can block this attacker ("can't be blocked by more than one creature"). */
+  maxBlockers(perm: Perm) {
+    let n = Infinity;
+    for (const src of this.bf) for (const s of src.def.statics) {
+      if (s.mode === 'MinMaxBlocker' && s.params.Max && this.staticHits(src, s.params, perm)) n = Math.min(n, +s.params.Max);
+    }
+    return n;
+  }
   private staticHits(src: Perm, params: Record<string, string>, perm: Perm) {
     const f = params.ValidCard ?? params.Affected;
     if (!f) return false;
@@ -581,7 +597,10 @@ export class Game {
     this.stack.push(item);
     this.emit({ type: 'cast', player: pid, card: c, item });
     // prowess
-    if (!isCreature) for (const perm of this.bf) if (perm.controller === pid && this.has(perm, 'Prowess')) { perm.tempP++; perm.tempT++; }
+    if (!isCreature) for (const perm of this.bf) if (perm.controller === pid && this.has(perm, 'Prowess')) {
+      const n = Math.max(1, perm.def.keywords.filter(k => k === 'Prowess').length);   // Thor Odinson has prowess twice
+      perm.tempP += n; perm.tempT += n;
+    }
     this.resolveTriggers();
     if (!this.inPriority) this.settle(pid);
     return true;
@@ -1471,8 +1490,13 @@ export class Game {
     for (const [, bs] of blocks) for (const b of bs) { b.blocking = true; this.emit({ type: 'blocks', perm: b }); }
     if (this.opts.trace && blocks.size) this.trace(`  blocks: ${[...blocks].map(([a, bs]) => `${bs.map(b => b.def.name).join('+')} on ${a.def.name}`).join('; ')}`);
     AI.combatTricks(this, this.players[ap], this.players[dp], live, blocks);
-    this.combatDamage(live, blocks, true);
-    if (!this.over) this.combatDamage(live, blocks, false);
+    this.resolveCombatDamage(live, blocks);
+  }
+
+  /** First-strike damage step (if anyone has it), then regular damage. */
+  resolveCombatDamage(attackers: Perm[], blocks: Map<Perm, Perm[]>) {
+    this.combatDamage(attackers, blocks, true);
+    if (!this.over) this.combatDamage(attackers, blocks, false);
     this.checkSBA();
   }
 
