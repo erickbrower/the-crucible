@@ -23,7 +23,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -296,4 +296,11 @@ export function loadToken(script: string): CardDef {
 export function coverage(def: CardDef): { ok: boolean; notes: string[] } {
   const notes = [...new Set(def.notes)];
   return { ok: notes.length === 0, notes };
+}
+
+/** The effect an opponent gets when a gift is promised (SVar GiftAbility). */
+export function compileGift(def: CardDef): Effect {
+  const src = def.svars.GiftAbility ?? '';
+  const face = { name: def.name, svars: def.svars, get: () => undefined, all: () => [] } as unknown as RawFace;
+  return compileEffect(face, src, []);
 }

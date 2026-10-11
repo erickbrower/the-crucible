@@ -1,9 +1,10 @@
 // Heuristic player AI. One policy drives both seats; deck "style" (aggro / midrange / control,
 // inferred from the list) nudges a few decisions such as trading, racing and holding counter mana.
-import type { Ability, CardDef, Color, Effect } from '../cards/model.js';
+import type { Ability, CardDef, Color, Effect, Pip } from '../cards/model.js';
 import { COLORS, cantBeCountered } from '../cards/model.js';
 import type { Ctx, Game, StackItem, Target } from '../engine/game.js';
 import { matches, FilterCtx } from '../engine/filters.js';
+import { parseManaCost } from '../cards/compile.js';
 import type { CardInst, Perm, Player } from '../engine/state.js';
 
 // ------------------------------------------------------------------ steering hints
@@ -332,6 +333,28 @@ export function chooseCharm(g: Game, eff: Effect, ctx: Ctx): Effect[] {
   const choices = [...(eff.choices ?? [])];
   const scored = choices.map(c => ({ c, s: (hint.charm && c.api === hint.charm ? 100 : 0) + effectScore(g, c, ctx) }));
   return scored.sort((a, b) => b.s - a.s).map(x => x.c);
+}
+
+/** Spree: pick the best modes whose extra costs we can pay on top of the base cost. */
+export function chooseSpreeModes(g: Game, pid: number, card: CardInst, generic: number, pips: Pip[]): Effect[] {
+  const ctx: Ctx = { p: pid, card, x: 0, kicked: false, targets: [] };
+  const eff = card.def.spell!.effect;
+  const scored = (eff.choices ?? []).map(c => ({ c, s: effectScore(g, c, ctx) })).filter(x => x.s > 0.5).sort((a, b) => b.s - a.s);
+  const chosen: Effect[] = [];
+  let gen = generic, ps = [...pips];
+  for (const { c } of scored) {
+    const mc = parseManaCost(c.params.ModeCost);
+    if (!g.payMana(pid, gen + mc.generic, [...ps, ...mc.pips], false)) continue;
+    chosen.push(c); gen += mc.generic; ps = [...ps, ...mc.pips];
+  }
+  return chosen;
+}
+
+/** Promise the gift unless it's something big (an extra turn, a Rhystic Study). */
+export function promiseGift(g: Game, pid: number, card: CardInst): boolean {
+  void g; void pid;
+  const desc = card.def.svars.GiftAbility?.match(/GiftDescription\$ ([^|]+)/)?.[1]?.trim() ?? '';
+  return !/extra turn|Rhystic/i.test(desc);
 }
 
 export function optionalYes(g: Game, eff: Effect, ctx: Ctx): boolean {

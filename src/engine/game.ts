@@ -2,7 +2,7 @@
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
-import { loadToken, parseCost, parseManaCost } from '../cards/compile.js';
+import { loadToken, parseCost, parseManaCost, compileGift } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
 import * as AI from '../ai/policy.js';
@@ -29,6 +29,8 @@ export interface StackItem {
   sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
   flashback?: boolean;             // cast from the graveyard; exiled instead of going anywhere else
   warp?: boolean;                  // cast for its warp cost: exiled at the next end step
+  gift?: boolean;                  // gift promised to the opponent
+  modes?: Effect[];                // Spree: the modes paid for
   countered?: boolean;
   plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
 }
@@ -236,7 +238,7 @@ export class Game {
       return {
         kind: 'card', def: perm.def, controller: perm.controller, owner: perm.owner, token: perm.token, id: perm.id,
         tapped: perm.tapped, attacking: perm.attacking, blocking: perm.blocking, power: st.power, toughness: st.toughness,
-        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters,
+        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters, giftPromised: perm.giftPromised,
       };
     }
     return { kind: 'card', def: x.def, controller: controller ?? (x as Perm).controller ?? x.owner, owner: x.owner, token: x.token, id: x.id,
@@ -401,6 +403,7 @@ export class Game {
     let base: number | undefined;
     let rest = '';
     if ((m = expr.match(/^Count\$Kicked\.(\d+)\.(\d+)/))) return ctx.kicked ? +m[1] : +m[2];
+    if ((m = expr.match(/^Count\$PromisedGift\.(\d+)\.(\d+)/))) return (ctx.spell?.gift ?? ctx.source?.giftPromised) ? +m[1] : +m[2];
     if ((m = expr.match(/^Count\$Compare .*\.(\d+)\.(\d+)$/))) return +m[2];
     if (/^Count\$xPaid/.test(expr)) return ctx.x;
     if (/^Count\$YourLifeTotal/.test(expr)) return me.life;
@@ -584,6 +587,7 @@ export class Game {
 
   canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
+    if (this.isSpree(c.def)) return AI.chooseSpreeModes(this, pid, c, generic, pips).length > 0;
     return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
   }
 
@@ -688,6 +692,13 @@ export class Game {
     if (opts.fromExile && !(p.warpExile ?? []).some(w => w.card === c && w.turn < this.turn)) return false;
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
+    // Spree: each chosen mode adds its own cost
+    let modes: Effect[] | undefined;
+    if (this.isSpree(c.def)) {
+      modes = AI.chooseSpreeModes(this, pid, c, generic, pips);
+      if (!modes.length) return false;
+      for (const m of modes) { const mc = parseManaCost(m.params.ModeCost); generic += mc.generic; pips = [...pips, ...mc.pips]; }
+    }
     if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) return false;
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
@@ -695,11 +706,12 @@ export class Game {
     else if (opts.fromExile) { p.exile.splice(p.exile.indexOf(c), 1); p.warpExile = p.warpExile!.filter(w => w.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++;
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp };
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, modes,
+      gift: c.def.keywords.includes('Gift') && AI.promiseGift(this, pid, c) };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${opts.fromExile ? ' from exile' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${opts.fromExile ? ' from exile' : ''}${item.gift ? ' (gift promised)' : ''}${modes ? ` (spree: ${modes.length} mode${modes.length > 1 ? 's' : ''})` : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
@@ -715,13 +727,18 @@ export class Game {
     return true;
   }
 
+  isSpree(d: CardDef) { return d.keywords.includes('Spree') && d.spell?.effect.api === 'Charm'; }
+
   isPermanentSpell(d: CardDef) {
     return d.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !d.types.includes('Instant') && !d.types.includes('Sorcery');
   }
 
   private lockTargets(eff: Effect, ctx: Ctx): SpellStep[] {
     let steps: Effect[] = [eff];
-    if (eff.api === 'Charm') {
+    if (eff.api === 'Charm' && ctx.spell?.modes) {
+      steps = [...ctx.spell.modes];
+      if (eff.sub) steps.push(eff.sub);
+    } else if (eff.api === 'Charm') {
       const n = eff.params.CharmNum ? Math.max(1, this.amount(eff.params.CharmNum, ctx)) : 1;
       steps = AI.chooseCharm(this, eff, ctx).slice(0, n);
       if (eff.sub) steps.push(eff.sub);
@@ -808,8 +825,12 @@ export class Game {
 
   resolveSpell(item: StackItem) {
     const c = item.card; const pid = item.controller; const p = this.players[pid];
+    if (item.gift && c.def.svars.GiftAbility) {
+      this.trace(`gives P${this.opp(pid)} the gift`, pid);
+      this.resolveEffect(compileGift(c.def), { p: pid, card: c, x: 0, kicked: false, targets: [], spell: item });
+    }
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
-      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {});
+      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {}, { giftPromised: item.gift });
       if (item.warp) perm.warped = true;
       if (c.def.keywords.some(k => k.startsWith('Enchant'))) {
         const host = AI.chooseAuraHost(this, perm);
@@ -829,11 +850,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ battlefield movement
-  enter(c: CardInst, controller: number, opts: { tapped?: boolean; token?: boolean; attacking?: boolean } = {}): Perm {
+  enter(c: CardInst, controller: number, opts: { tapped?: boolean; token?: boolean; attacking?: boolean } = {}, extra: Partial<Perm> = {}): Perm {
     const perm: Perm = {
       ...c, controller, tapped: !!opts.tapped, sick: true, token: !!opts.token || !!c.token, counters: {}, damage: 0,
       deathtouched: false, tempP: 0, tempT: 0, tempKw: [], exiledUntilLeaves: [], transformed: false, enteredTurn: this.turn,
-      attacking: opts.attacking,
+      attacking: opts.attacking, ...extra,
     };
     if (c.def.loyalty !== undefined) perm.counters.LOYALTY = c.def.loyalty;
     for (const k of c.def.keywords) {
@@ -1245,6 +1266,11 @@ export class Game {
         if (!ok) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
       }
     }
+    if (P.ConditionPresent?.includes('PromisedGift')) {
+      const promised = !!(ctx.spell?.gift ?? ctx.source?.giftPromised);
+      const want = (P.ConditionCompare ?? 'EQ1') !== 'EQ0';
+      if (promised !== want) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
+    }
     if (P.OptionalDecider && !AI.optionalYes(this, eff, ctx)) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
     let targets: Target[] = [];
     const needsTargets = P.ValidTgts !== undefined || P.TargetType !== undefined;
@@ -1535,6 +1561,7 @@ export class Game {
       switch (part) {
         case 'Self': case 'Card.Self': if (ctx.source && this.bf.includes(ctx.source)) out.push({ kind: 'perm', perm: ctx.source }); break;
         case 'You': out.push({ kind: 'player', pid: ctx.p }); break;
+        case 'Promised': out.push({ kind: 'player', pid: this.opp(ctx.p) }); break;
         case 'Opponent': case 'Player.Opponent': out.push({ kind: 'player', pid: this.opp(ctx.p) }); break;
         case 'Player': out.push({ kind: 'player', pid: 0 }, { kind: 'player', pid: 1 }); break;
         case 'Targeted': case 'ParentTarget': case 'TargetedCard': out.push(...ctx.targets); break;

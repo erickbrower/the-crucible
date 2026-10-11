@@ -32,7 +32,8 @@ export interface Perm extends CardInst {
   noUntap?: boolean;
   earthbent?: boolean;
   baseDef?: CardDef;
-  warped?: boolean;         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  warped?: boolean;
+  giftPromised?: boolean;   // cast with its gift promised         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
 }
 
 export interface DeckList {
