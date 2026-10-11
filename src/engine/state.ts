@@ -31,7 +31,8 @@ export interface Perm extends CardInst {
   chosenType?: string;
   noUntap?: boolean;
   earthbent?: boolean;
-  baseDef?: CardDef;        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  baseDef?: CardDef;
+  warped?: boolean;         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
 }
 
 export interface DeckList {
@@ -62,6 +63,7 @@ export interface Player {
   mulligans: number;
   speed?: number;           // Start your engines! (0/undefined = no speed; max 4)
   speedTurn?: number;       // turn the speed last increased
+  warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn
   pool?: Color[];           // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }

@@ -28,6 +28,7 @@ export interface StackItem {
   card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
   sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
   flashback?: boolean;             // cast from the graveyard; exiled instead of going anywhere else
+  warp?: boolean;                  // cast for its warp cost: exiled at the next end step
   countered?: boolean;
   plan?: SpellStep[];              // instants/sorceries: modes + targets chosen on cast
 }
@@ -164,6 +165,7 @@ export class Game {
     if (this.over) return;
     this.phase = 'end';
     this.emit({ type: 'phase', phase: 'End of Turn', player: this.active });
+    this.exileWarped();
     // opponent's end-of-turn window (flash creatures, instant removal, draw)
     AI.endOfTurnWindow(this, this.players[this.opp(this.active)]);
     this.cleanup();
@@ -582,6 +584,16 @@ export class Game {
     return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
   }
 
+  /** Warp: at the beginning of the end step, exile warped permanents; they can be cast from exile on a later turn. */
+  exileWarped() {
+    for (const perm of this.bf.filter(x => x.warped)) {
+      const owner = this.players[perm.owner];
+      this.leave(perm, 'exile');
+      const card = owner.exile.find(c => c.id === perm.id);
+      if (card) { owner.warpExile = [...(owner.warpExile ?? []), { card, turn: this.turn }]; this.trace(`${card.def.name} is exiled (warp)`, perm.owner); }
+    }
+  }
+
   /** Mana-only alternate cost from a keyword like "Flashback:2 R" (undefined if it costs something else). */
   keywordCost(c: CardInst | CardDef, kw: string): string | undefined {
     const def = 'def' in c ? c.def : c;
@@ -644,22 +656,25 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ casting
-  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean } = {}): boolean {
+  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean; warp?: boolean; fromExile?: boolean } = {}): boolean {
     const p = this.players[pid];
     if (opts.flashback) { opts = { ...opts, altCost: this.keywordCost(c, 'Flashback') }; if (opts.altCost === undefined || !p.graveyard.includes(c)) return false; }
+    if (opts.warp) { opts = { ...opts, altCost: this.keywordCost(c, 'Warp') }; if (opts.altCost === undefined || !p.hand.includes(c)) return false; }
+    if (opts.fromExile && !(p.warpExile ?? []).some(w => w.card === c && w.turn < this.turn)) return false;
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
     if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) return false;
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
     else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
+    else if (opts.fromExile) { p.exile.splice(p.exile.indexOf(c), 1); p.warpExile = p.warpExile!.filter(w => w.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++;
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback };
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${opts.fromExile ? ' from exile' : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
@@ -770,6 +785,7 @@ export class Game {
     const c = item.card; const pid = item.controller; const p = this.players[pid];
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
       const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {});
+      if (item.warp) perm.warped = true;
       if (c.def.keywords.some(k => k.startsWith('Enchant'))) {
         const host = AI.chooseAuraHost(this, perm);
         if (host) perm.attachedTo = host.id; else this.leave(perm, 'graveyard');

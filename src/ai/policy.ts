@@ -436,7 +436,7 @@ export function chooseAuraHost(g: Game, perm: Perm): Perm | undefined {
   return auraHostFor(g, perm.def, perm.controller, perm.id);
 }
 
-interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm; flashback?: boolean }
+interface Plan { score: number; x: number; kicked: boolean; sacForAlt?: Perm; flashback?: boolean; warp?: boolean; fromExile?: boolean }
 
 function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, window: 'main1' | 'main2' | 'instant', flashback = false): Plan | undefined {
   const d = card.def;
@@ -498,7 +498,7 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
 function castAction(g: Game, p: Player, card: CardInst, fromCommand: boolean, plan: Plan): Action {
   return {
     score: plan.score, label: `cast ${card.def.name}`,
-    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt, flashback: plan.flashback }),
+    run: () => g.castSpell(p.id, card, { fromCommand, x: plan.x, kicked: plan.kicked, sacForAlt: plan.sacForAlt, flashback: plan.flashback, warp: plan.warp, fromExile: plan.fromExile }),
   };
 }
 
@@ -644,6 +644,27 @@ function cycleActions(g: Game, p: Player): Action[] {
   return acts;
 }
 
+/**
+ * Warp: cast a creature for its (cheaper) warp cost when we can't afford it normally this turn.
+ * It's exiled at end of turn and comes back later, so it's worth it for an enters trigger or a hasty hit.
+ */
+function warpActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window === 'instant') return [];
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const cost = g.keywordCost(c, 'Warp');
+    if (cost === undefined || /X/.test(cost) || g.canCast(p.id, c)) continue;
+    if (!g.canCast(p.id, c, { altCost: cost })) continue;
+    const etb = c.def.triggers.some(t => (t.mode === 'ChangesZone' && t.params.Destination === 'Battlefield' && /Self/.test(t.params.ValidCard ?? '')));
+    const hasty = c.def.keywords.includes('Haste') && window === 'main1';
+    let score = (etb ? 3 : 0) + (hasty ? (c.def.power ?? 0) * 0.7 : 0);
+    if (!c.def.types.includes('Creature')) score = etb ? 3 : 0;
+    if (score < 1.5) continue;
+    acts.push({ score, label: `warp ${c.def.name}`, run: () => g.castSpell(p.id, c, { warp: true }) });
+  }
+  return acts;
+}
+
 function runActions(g: Game, p: Player, gather: () => Action[]) {
   for (let guard = 0; guard < 30 && !g.over; guard++) {
     const acts = gather().sort((a, b) => b.score - a.score);
@@ -674,6 +695,13 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       const plan = planSpell(g, p, card, false, window, true);
       if (plan) acts.push(castAction(g, p, card, false, plan));
     }
+    // warped cards in exile can be cast normally on a later turn
+    for (const w of p.warpExile ?? []) {
+      if (w.turn >= g.turn) continue;
+      const plan = planSpell(g, p, w.card, false, window);
+      if (plan) acts.push(castAction(g, p, w.card, false, { ...plan, fromExile: true }));
+    }
+    acts.push(...warpActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
     acts.push(...cycleActions(g, p));
     return acts;
