@@ -14,7 +14,7 @@ export const SUPPORTED_APIS = new Set([
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
 ]);
-const IGNORED_APIS = new Set(['StoreSVar', 'Effect', 'Animate', 'GenericChoice', 'ChooseCard', 'Regenerate']);
+const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
@@ -102,6 +102,9 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   const eff: Effect = { api, params };
   if (!SUPPORTED_APIS.has(api)) notes.push(`unsupported effect "${api}"`);
   else if (IGNORED_APIS.has(api)) notes.push(`ignored effect "${api}"`);
+  else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
+  else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
+  else if (api === 'Animate' && (params.Triggers || params.Abilities || params.staticAbilities || params.HiddenKeywords)) notes.push('animate: granted abilities ignored');
   void SILENT_APIS;
   if (api === 'Charm' && params.Choices && depth < 6) {
     eff.choices = params.Choices.split(',').map(n => face.svars[n.trim()]).filter(Boolean)
@@ -116,6 +119,33 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
     if (!params.ETB) notes.push(`condition on ${api} ignored`);
   }
   return eff;
+}
+
+/** Temporary statics the engine applies: pumps, keywords, "can't block/attack", "can't be blocked". */
+function tempStaticSupported(st: Record<string, string>): boolean {
+  if (st.Mode === 'Continuous') {
+    const changes = Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k));
+    return changes.length > 0 && changes.every(k => ['AddPower', 'AddToughness', 'AddKeyword'].includes(k)
+      || (k === 'AddHiddenKeyword' && /can't (block|attack)/i.test(st.AddHiddenKeyword)));
+  }
+  if (st.Mode === 'CantBlockBy') return !st.ValidBlocker;
+  return /^CantBlock$|^CantAttack$|^CantAttack,CantBlock$/.test(st.Mode);
+}
+
+/** Parts of a Forge "Effect" (temporary statics/triggers/replacements) the engine does not run yet. */
+export function effectGaps(face: { svars: Record<string, string> }, params: Record<string, string>): string[] {
+  const out: string[] = [];
+  const list = (k: string) => (params[k] ?? '').split(',').map(s => s.trim()).filter(Boolean).map(n => parseParams(face.svars[n] ?? ''));
+  for (const st of list('StaticAbilities')) {
+    if (st.Mode === 'Continuous' && st.MayPlay) {
+      if (!/IsRemembered/.test(st.Affected ?? '') || (st.AffectedZone && st.AffectedZone !== 'Exile')) out.push(`effect: may play "${st.Affected}" ignored`);
+      if (!/Remembered|Targeted|ChosenCard/.test(params.RememberObjects ?? '')) out.push('effect: may play without remembered cards ignored');
+    } else if (!tempStaticSupported(st)) out.push(`effect static "${st.Mode}${st.Mode === 'Continuous' ? ' ' + Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k)).join('+') : ''}" ignored`);
+  }
+  for (const t of list('Triggers')) out.push(`effect trigger "${t.Mode}" ignored`);
+  for (const r of list('ReplacementEffects')) out.push(`effect replacement "${r.Event}" ignored`);
+  if (!params.StaticAbilities && !params.Triggers && !params.ReplacementEffects) out.push('ignored effect "Effect"');
+  return out;
 }
 
 function compileLand(face: RawFace, abilities: Ability[], subtypes: string[]): LandInfo {
@@ -151,7 +181,11 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
   if (pt) {
     const [p, t] = pt.split('/');
     power = /^-?\d+$/.test(p) ? +p : 0; toughness = /^-?\d+$/.test(t) ? +t : 0;
-    if (!/^-?\d+$/.test(p) || !/^-?\d+$/.test(t)) { ptStar = true; notes.push('variable power/toughness approximated'); }
+    if (!/^-?\d+$/.test(p) || !/^-?\d+$/.test(t)) {
+      ptStar = true;
+      const cda = face.all('S').some(s => /CharacteristicDefining\$ True/.test(s) && /SetPower|SetToughness/.test(s));
+      if (!cda) notes.push('variable power/toughness approximated');   // with a CDA the engine computes it
+    }
   }
   const keywords: string[] = [];
   let kicker: ManaCost | undefined, affinity: string | undefined, altAdditional: CardDef['altAdditional'];
@@ -233,8 +267,12 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     statics.push({ mode: params.Mode, params });
     const m = params.Mode;
     if (m === 'Continuous') {
-      if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
+      if (params.CharacteristicDefining && !params.AddType && !params.AddAbility && !params.AddTrigger && !params.RemoveAllAbilities) { /* computed by the engine */ }
+      else if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
+    } else if (m === 'AlternativeCost' && /^Spell/.test(params.ValidSA ?? '') && (params.ValidCard ?? 'Card.Self') === 'Card.Self'
+      && ((params.Cost ?? '').match(/\w+<[^>]*>|\S+/g) ?? []).every(t => !/</.test(t) || /^(PayLife|ExileFromHand|Return|Sac)</.test(t))) {
+      // free spells ("if you control a commander") and pitch costs (life, exile from hand, return a land, sacrifice)
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {
       notes.push(`static "${m}" ignored`);
     }
@@ -269,8 +307,10 @@ export function loadCard(name: string): CardDef {
   if (faces.length > 1) {
     const back = compileFace(faces[1]);
     if (alt === 'DoubleFaced' || alt === 'Modal' || alt === 'Transform' || front.abilities.some(a => a.effect.api === 'SetState')) {
-      if (alt === 'Modal' && !front.abilities.some(a => a.effect.api === 'SetState')) front.notes.push('modal back face not playable');
-      else front.back = back;
+      if (alt === 'Modal' && !front.abilities.some(a => a.effect.api === 'SetState')) {
+        front.modalBack = back;
+        if (!back.land) front.notes.push('modal back face not playable');   // spell/creature backs are not chosen yet
+      } else front.back = back;
     } else if (alt === 'Adventure' || alt === 'Omen') {
       front.notes.push(`${alt.toLowerCase()} half "${back.name}" not modeled`);
     } else if (alt === 'Split') {

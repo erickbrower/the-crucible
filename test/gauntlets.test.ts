@@ -68,10 +68,12 @@ for (const fmt of FORMATS) {
           expect(outside).toEqual([]);
         }
 
-        // Smoke test: the engine can play this deck against the first opponent in its gauntlet.
-        const other = loadDeck(path.join(dir, files[0]));
-        const r = runMatch(deck.list, other.list, { games: 4, format: engineRules(fmt), maxTurns: 25, seed: 7 });
-        expect(r.games).toBe(4);
+        // Smoke test: the engine can play this deck against every opponent in its gauntlet.
+        for (const f2 of files) {
+          const other = loadDeck(path.join(dir, f2));
+          const r = runMatch(deck.list, other.list, { games: 2, format: engineRules(fmt), maxTurns: 25, seed: 7 });
+          expect(r.games).toBe(2);
+        }
       });
     }
   });

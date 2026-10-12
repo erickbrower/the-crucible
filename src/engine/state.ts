@@ -65,6 +65,7 @@ export interface Player {
   speed?: number;           // Start your engines! (0/undefined = no speed; max 4)
   speedTurn?: number;       // turn the speed last increased
   warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn
+  mayPlay?: { card: CardInst; untilSeq: number; free?: boolean }[];   // exiled cards this player may play (impulse draw) until turn #untilSeq ends
   pool?: Color[];           // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }

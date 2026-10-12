@@ -21,6 +21,7 @@ export interface Effect {
   params: Record<string, string>;
   sub?: Effect;                        // SubAbility chain
   choices?: Effect[];                  // Charm modes
+  svars?: Record<string, string>;      // the card's SVars, kept on "Effect" abilities that refer to their own statics
 }
 
 export interface Cost {
@@ -79,6 +80,7 @@ export interface CardDef {
   land?: LandInfo;
   notes: string[];        // coverage notes: things the engine ignores or approximates
   back?: CardDef;         // transformed face (SetState Transform)
+  modalBack?: CardDef;    // modal double-faced card: the other face you may play instead (only lands are played)
   kicker?: ManaCost;
   offspring?: boolean;    // the kicker is an offspring cost: a 1/1 token copy enters too
   altAdditional?: { sac: string; orMana: ManaCost };  // e.g. Eaten Alive

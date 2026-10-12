@@ -127,7 +127,7 @@ function canBlock(g: Game, b: Perm, a: Perm): boolean {
 
 // ------------------------------------------------------------------ mulligans
 export function keepHand(g: Game, p: Player, handSize: number): boolean {
-  const lands = p.hand.filter(isLandCard).length;
+  const lands = p.hand.filter(c => isLandCard(c) || c.def.modalBack?.land).length;   // MDFC land backs count
   if (handSize >= 7) return lands >= 2 && lands <= 5;
   if (handSize === 6) return lands >= 1 && lands <= 5;
   void g;
@@ -174,14 +174,28 @@ function wouldEnterTapped(g: Game, p: Player, c: CardInst): boolean {
 }
 
 function playBestLand(g: Game, p: Player) {
-  const lands = p.hand.filter(c => c.def.land);
-  if (!lands.length || p.landsPlayed > 0) return;
-  const need = neededColor(g, p);
+  if (p.landsPlayed > 0) return;
+  // lands we may play from exile (impulse draw) run out, so they are worth playing first
+  const fromExile = (p.mayPlay ?? []).map(m => m.card).filter(c => c.def.land && g.inExile(c));
   const n = landsOnBf(g, p.id);
+  // Each option is a card plus the face it would enter as. Modal double-faced cards offer their land back:
+  // pathways always (pick the color), spell-front cards only when we have no real land and need the drop.
+  type Option = { card: CardInst; face: CardDef; spell: boolean };
+  const options: Option[] = [...p.hand.filter(c => c.def.land), ...fromExile].map(c => ({ card: c, face: c.def, spell: false }));
+  const realLands = options.length;
+  for (const c of p.hand) {
+    const back = c.def.modalBack;
+    if (!back?.land) continue;
+    if (c.def.land) options.push({ card: c, face: back, spell: false });                        // pathway: other color
+    else if (!realLands && (n < 4 || c.def.mv > n + 1)) options.push({ card: c, face: back, spell: true });
+  }
+  if (!options.length) return;
+  const need = neededColor(g, p);
   // do we have something that needs every mana next turn's worth? i.e. a spell costing exactly n+1
   const curveNow = [...p.hand, ...p.command].some(c => !isLandCard(c) && !isInstantSpeed(c.def) && c.def.mv + (c.isCommander ? p.commanderTax : 0) === n + 1);
-  let best = lands[0], bestS = -Infinity;
-  for (const l of lands) {
+  let best = options[0], bestS = -Infinity;
+  for (const o of options) {
+    const l = o.face === o.card.def ? o.card : { ...o.card, def: o.face };
     const cols = landProduces(g, p, l);
     let s = cols.includes(need) ? 3 : 0;
     s += cols.length * 0.4;
@@ -189,9 +203,11 @@ function playBestLand(g: Game, p: Player) {
     const tapped = wouldEnterTapped(g, p, l);
     if (tapped) s += curveNow ? -4 : 1;
     if (l.def.land?.entersTapped === 'unlessPayLife' && !curveNow) s += 0.5;   // will enter tapped for free
-    if (s > bestS) { bestS = s; best = l; }
+    if (fromExile.includes(o.card)) s += 2;
+    if (o.spell) s -= 1.5;                              // giving up the spell side costs something
+    if (s > bestS) { bestS = s; best = o; }
   }
-  g.playLand(p, best, curveNow);
+  g.playLand(p, best.card, curveNow, best.face === best.card.def ? undefined : best.face);
 }
 
 // ------------------------------------------------------------------ targeting
@@ -746,6 +762,12 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       const plan = planSpell(g, p, w.card, false, window);
       if (plan) acts.push(castAction(g, p, w.card, false, { ...plan, fromExile: true }));
     }
+    // impulse draw: exiled cards we may play this turn (or longer)
+    for (const m of p.mayPlay ?? []) {
+      if (!g.inExile(m.card) || m.card.def.land) continue;
+      const plan = planSpell(g, p, m.card, false, window);
+      if (plan) acts.push(castAction(g, p, m.card, false, { ...plan, fromExile: true }));
+    }
     acts.push(...warpActions(g, p, window));
     acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
@@ -821,6 +843,34 @@ export function crewVehicles(g: Game, p: Player) {
     if (total < n) continue;
     const lost = crew.filter(canAttack).reduce((a, c) => a + g.statsOf(c).power, 0);
     if ((v.def.power ?? 0) > lost) g.crew(v, crew);
+  }
+}
+
+/**
+ * Manlands and other "becomes a creature until end of turn" permanents: animate before attacking when the
+ * mana can be paid without tapping the permanent itself and no untapped opposing creature can block it and kill it.
+ */
+export function animateForAttack(g: Game, p: Player) {
+  for (const perm of g.bf.filter(x => x.controller === p.id && !x.tapped && !x.sick && !isCreature(x))) {
+    const ab = perm.def.abilities.find(a => a.effect.api === 'Animate' && a.effect.params.Defined === 'Self' && !a.effect.params.Duration
+      && a.cost.supported && !a.cost.tap && !a.cost.sac && !a.cost.loyalty && !a.cost.discard && !a.cost.mana.x);
+    if (!ab) continue;
+    const P = ab.effect.params;
+    if (!/Creature/.test(P.Types ?? '')) continue;
+    const power = +(P.Power ?? 0), tough = +(P.Toughness ?? 0);
+    const kws = (P.Keywords ?? '').split(' & ');
+    if (power < 1) continue;
+    const blockers = myCreatures(g, g.opp(p.id)).filter(b => !b.tapped
+      && (!kws.includes('Flying') || g.has(b, 'Flying') || g.has(b, 'Reach')));
+    if (blockers.some(b => g.statsOf(b).power >= tough)) continue;
+    // pay with other sources: mark it tapped while paying so the solver leaves it alone
+    perm.tapped = true;
+    const ok = g.payMana(p.id, ab.cost.mana.generic, ab.cost.mana.pips, false);
+    if (ok) g.payMana(p.id, ab.cost.mana.generic, ab.cost.mana.pips, true);
+    perm.tapped = false;
+    if (!ok) continue;
+    g.trace(`activates ${perm.def.name}: ${ab.description ?? 'Animate'}`, p.id);
+    g.resolveEffect(ab.effect, { p: p.id, source: perm, x: 0, kicked: false, targets: [] });
   }
 }
 

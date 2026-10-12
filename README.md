@@ -142,6 +142,23 @@ draw, discard, tokens, pumps, ±1/±1 counters, fight, counterspells (with "unle
 scry/surveil, mill, sacrifice, tap/untap, auras and equipment, modal spells, transform, explore,
 investigate, amass, connive, ward, prowess, mobilize and sagas.
 
+Also supported, each with its own test file:
+- **Impulse draw** (`impulse.test.ts`): "exile the top card, you may play it this turn" really exiles the card,
+  and the permission runs out at the stated time ("this turn", "until the end of your next turn"). Includes
+  "exile two, choose one" (Fireglass Mentor). Exiled lands can be played as the land drop.
+- **Temporary effects** (`effects.test.ts`): "can't be blocked this turn", "creatures without flying can't
+  block this turn", granted keywords and pumps until end of turn, and emblems ("creatures you control get +2/+2").
+- **Modal double-faced lands** (`mdfc.test.ts`): pathways enter as whichever color is needed; spell-front
+  cards (Agadeem's Awakening) are played as their land when there's no other land drop. Their land backs
+  count as lands when deciding to mulligan.
+- **Animate** (`animate.test.ts`): "becomes a creature" effects. Manlands animate before combat when other
+  lands can pay for it and no untapped blocker would kill them.
+- **Alternative costs** (`altcost.test.ts`): free spells ("if you control a commander") and pitch spells
+  that cost life, cards exiled from hand, a returned land or a sacrifice (Force of Will, Daze, Snuff Out).
+  They're used when the mana cost can't be paid.
+- **Characteristic-defining power/toughness** (`cda.test.ts`): Crusader of Odric, Tarmogoyf-style goyfs and
+  Enigma Drake compute their size from the board and graveyards.
+
 Keyword mechanics with their own tests (`test/`): equip, kicker, offspring, affinity, convoke,
 cycling and landcycling, flashback, spree, gift, warp, crew, station, ninjutsu, sneak,
 firebending, earthbend, changeling, and speed ("Start your engines!" / max speed). Combat handles flying, reach,
@@ -167,7 +184,9 @@ indestructible.
   can't be responded to.
 - Anything listed by `coverage` is ignored or approximated. Examples: adventures and omens
   (only the creature half), Impending, Disguise, Plot, Saddle, graveyard-cast abilities other
-  than flashback, "can't be countered", and most replacement effects.
+  than flashback, "can't be countered", most replacement effects, abilities granted by Animate or
+  by temporary effects, and spell-side backs of modal double-faced cards. Across Erick's decks and all
+  gauntlets, 298 of 971 distinct cards still have at least one such note (346 before October 12, 2026).
 - Vehicles are only crewed to attack, never to block. Stations are charged after combat.
 - No hidden-information modeling. Hand-peek effects (Deep-Cavern Bat) do nothing.
 - Both Brawl formats are modeled as 1v1 with 25 life and +2 commander tax.
