@@ -1,0 +1,13 @@
+# Runs the Crucible in the background and restarts it whenever Docker starts.
+#   docker compose up -d --build   start (or rebuild after a git pull)
+#   docker compose down            stop
+services:
+  crucible:
+    build: .
+    container_name: crucible
+    ports:
+      - "127.0.0.1:4777:4777"     # only this PC can reach it
+    volumes:
+      - ./decks/mine:/app/decks/mine   # decks saved in the UI land in your clone
+      - ./data:/app/data               # your uploaded Arena collection
+    restart: unless-stopped

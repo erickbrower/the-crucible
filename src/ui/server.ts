@@ -311,11 +311,14 @@ function openBrowser(url: string) {
   try { spawn(cmd[0], [...cmd[1]], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref(); } catch { /* no browser */ }
 }
 
+// HOST=0.0.0.0 inside Docker so the published port reaches it; on the desktop it stays local-only.
+const HOST = process.env.HOST ?? '127.0.0.1';
+
 function listen(port: number, tries = 10) {
   server.once('error', (e: NodeJS.ErrnoException) => {
     if (e.code === 'EADDRINUSE' && tries > 0) listen(port + 1, tries - 1); else throw e;
   });
-  server.listen(port, '127.0.0.1', () => {
+  server.listen(port, HOST, () => {
     const url = `http://localhost:${port}`;
     console.log(`\n  The Crucible is running at ${url}  (${pool.size} worker threads)\n  Press Ctrl+C to stop.\n`);
     if (!process.argv.includes('--no-open')) openBrowser(url);

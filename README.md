@@ -56,6 +56,18 @@ npm run ui        # starts a local server and opens http://localhost:4777 in you
 On Windows you can double-click `Crucible.cmd` instead; the first time it installs packages and
 downloads the Forge card data. Close the console window (or press Ctrl+C) to stop it.
 
+### Always-on with Docker
+
+```bash
+docker compose up -d --build     # build and start in the background; restarts whenever Docker starts
+docker compose down              # stop
+```
+
+Then open http://localhost:4777. The image downloads the Forge card data while it builds, so the
+first build takes a few minutes; run the same `up -d --build` after a `git pull` to update.
+Decks saved in the UI go to this clone's `decks/mine/` and your collection to `data/`, so they
+survive rebuilds. The port is bound to `127.0.0.1`, so only this computer can reach it.
+
 - **Your deck**: pick one of `decks/mine` or paste an Arena export. The panel shows the format,
   card count, colors, any cards the engine only partly models, and any cards that break the format
   (not Standard-legal, or extra copies in a singleton format). "Save to my decks" writes it to `decks/mine/`.
