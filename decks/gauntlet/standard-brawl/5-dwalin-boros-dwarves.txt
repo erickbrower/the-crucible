@@ -1,0 +1,56 @@
+# Dwalin, Weaponmaster: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of Boros Dwarf (55.0% in Standard).
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Dwalin, Weaponmaster
+
+Commander
+1 Dwalin, Weaponmaster
+
+Deck
+1 Authority of the Consuls
+1 Basilisk Collar
+1 Boltwave
+1 Burst Lightning
+1 Dragonfire Blade
+1 Dwarven Mauler
+1 Erode
+1 Ethereal Armor
+1 Flashback
+1 Hinterland Sanctifier
+1 Hired Claw
+1 Lavaspur Boots
+1 Liliana the Faultless
+1 Seam Rip
+1 Shardmage's Rescue
+1 Shock
+1 Veteran Survivor
+1 Abrade
+1 Chainsaw
+1 Dáin's Company
+1 Essence Channeler
+1 Feather of Flight
+1 Get Lost
+1 Kíli the Resourceful
+1 Lightning Helix
+1 Lightning Strike
+1 Sear
+1 Sheltered by Ghosts
+1 Spellbook Vendor
+1 Tomik, Izzet Sparkmage
+1 Avengers Disassembled
+1 Haliya, Guided by Light
+1 Valley Flamecaller
+1 Leyline Axe
+1 Smaug the Magnificent
+1 Thorin, Mountain-king
+1 Sacred Foundry
+1 Sunbillow Verge
+1 Inspiring Vantage
+1 The Lonely Mountain
+1 Abandoned Air Temple
+1 Sundown Pass
+1 Cori Mountain Monastery
+1 Adagia, Windswept Bastion
+8 Mountain
+7 Plains

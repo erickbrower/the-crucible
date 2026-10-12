@@ -1,0 +1,86 @@
+# Emry, Lurker of the Loch: Untapped.gg Competitive Brawl Bo1, tier B (rank 5 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/1510/emry-lurker-of-the-loch/AAQBmKAZAQFMX6wGyQnRBZIBBBYTrAnOAacG6CviCHviA8Me_SLUBFW2FM429QmdB88C9AuIUbYuYhjcAeTbCvXNB_flA6kB6i0E5UpDzD2NgAPJAUeuBMtY5-sClFvPBSqfgwf-AoXmAaYFCqvbARXXKN2aAVeyFIkDoAQVgJUD_gTIgQQh4v0Ca73kB-j1AeGIASbdAwPXB9gsAAAAAReMBQA
+Name Emry, Lurker of the Loch
+
+Commander
+1 Emry, Lurker of the Loch
+
+Deck
+1 Fabricate
+23 Island
+1 Darksteel Citadel
+1 Springleaf Drum
+1 Tormod's Crypt
+1 Ornithopter
+1 Thoughtcast
+1 Seat of the Synod
+1 Frogmite
+1 Force of Will
+1 Mind Stone
+1 Chromatic Star
+1 Lightning Greaves
+1 Mishra's Bauble
+1 Daze
+1 Aether Spellbomb
+1 Chromatic Sphere
+1 Mana Drain
+1 Library of Alexandria
+1 Strip Mine
+1 Chrome Mox
+1 Painter's Servant
+1 Mox Opal
+1 Grindstone
+1 Ancient Tomb
+1 Gemstone Caverns
+1 Treasure Cruise
+1 Inventors' Fair
+1 Metallic Rebuke
+1 Whir of Invention
+1 Paradox Engine
+1 Mox Amber
+1 Mystic Forge
+1 Witch's Oven
+1 Arcane Signet
+1 Shadowspear
+1 Soul-Guide Lantern
+1 Force of Negation
+1 Urza, Lord High Artificer
+1 Fierce Guardianship
+1 Subtlety
+1 Hard Evidence
+1 Thought Monitor
+1 Nettlecyst
+1 Treasure Vault
+1 Wash Away
+1 Moonsnare Prototype
+1 Patchwork Automaton
+1 Otawara, Soaring City
+1 Retrofitter Foundry
+1 Kappa Cannoneer
+1 Lórien Revealed
+1 The One Ring
+1 Phial of Galadriel
+1 Candy Trail
+1 The Irencrag
+1 The Enigma Jewel
+1 Simulacrum Synthesizer
+1 Fomori Vault
+1 Sink into Stupor
+1 Flare of Denial
+1 Disruptor Flute
+1 Archway of Innovation
+1 Unable to Scream
+1 Marvin, Murderous Mimic
+1 Repurposing Bay
+1 Stock Up
+1 Astrologian's Planisphere
+1 Sleep Magic
+1 Tezzeret, Cruel Captain
+1 Drix Interlacer
+1 Krang, Master Mind
+1 Sewer-veillance Cam
+1 The Ooze
+1 Skateboard
+1 Preponderant Pearl
+1 Petrified Hamlet

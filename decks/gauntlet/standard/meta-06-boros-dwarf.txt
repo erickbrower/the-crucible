@@ -1,0 +1,22 @@
+# Boros Dwarf: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 55.0% win rate over 10,000 matches. This list: 57.8% over 360 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/1101/boros-dwarf/AAQAAQABtiECiAXL-EMNuusB6VCGV4SGK_azA9dUlrUDk_YCvqwLlQJPhQF9AAA
+Name Boros Dwarf
+
+Deck
+3 Plains
+2 Basilisk Collar
+4 Sacred Foundry
+4 Cavern of Souls
+4 Inspiring Vantage
+4 Lavaspur Boots
+4 Chainsaw
+4 Leyline Axe
+4 Sunbillow Verge
+4 Dragonfire Blade
+4 Kíli the Resourceful
+4 Dwarven Mauler
+4 Thorin, Mountain-king
+4 Dáin's Company
+3 Dwalin, Weaponmaster
+4 The Lonely Mountain

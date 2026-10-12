@@ -1,0 +1,103 @@
+# Yuriko, the Tiger's Shadow: Untapped.gg Competitive Brawl Bo1, tier B (rank 6 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/4526/yuriko-the-tigers-shadow/AAQB-YwpAQFczgNHpAPlBLAG6QSACNkBowXACKcj6gHHCP8BtQHsKYEa-R0CHvsDQb4Wtg7YE-EU1hedAR0ZR5Y0xgI8mgeWHo0Ki8EBwPcFx6EDoQOtsgu4ewNa6QJ-xzM5iAVGAouAA7oCrVaVBqAV-d8Bh3ZU1VpNKiJL6wNpDZlG_KUIsgH52gGCLodd8VEIDwfzAnbJjQMb2wqGBI8B_4YH8ugIlCrWAZo--YkBRgABjQUBjAUAAA
+Name Yuriko, the Tiger's Shadow
+
+Commander
+1 Yuriko, the Tiger's Shadow
+
+Deck
+1 Fatal Push
+1 Hope of Ghirapur
+4 Island
+3 Swamp
+1 Cut Down
+1 Stifle
+1 Mana Leak
+1 Ornithopter
+1 Dark Ritual
+1 Force of Will
+1 Underground River
+1 Force Spike
+1 Brainstorm
+1 Command Tower
+1 Commandeer
+1 Daze
+1 Snuff Out
+1 Thoughtseize
+1 Mana Drain
+1 Dismember
+1 Flooded Strand
+1 Polluted Delta
+1 Vampiric Tutor
+1 Bloodstained Mire
+1 Baleful Strix
+1 Watery Grave
+1 Darkslick Shores
+1 Gemstone Caverns
+1 Spell Pierce
+1 Scalding Tarn
+1 Misty Rainforest
+1 Marsh Flats
+1 Verdant Catacombs
+1 Ulcerate
+1 Dig Through Time
+1 Treasure Cruise
+1 Temporal Trespass
+1 Mausoleum Wanderer
+1 Fourth Bridge Prowler
+1 Slither Blade
+1 Siren Stormtamer
+1 Tetsuko Umezawa, Fugitive
+1 Mox Amber
+1 Drown in the Loch
+1 Faerie Seer
+1 Force of Negation
+1 Changeling Outcast
+1 Ingenious Infiltrator
+1 Prismatic Vista
+1 Sea Gate Restoration
+1 Agadeem's Awakening
+1 Clearwater Pathway
+1 Fierce Guardianship
+1 Deadly Rollick
+1 Subtlety
+1 Dauthi Voidwalker
+1 Silver Raven
+1 Hive of the Eye Tyrant
+1 Opposition Agent
+1 Shipwreck Marsh
+1 Lantern Bearer
+1 Wash Away
+1 Futurist Operative
+1 Prosperous Thief
+1 Thousand-Faced Shadow
+1 Dokuchi Silencer
+1 Nashi, Moon Sage's Scion
+1 Silver-Fur Master
+1 Otawara, Soaring City
+1 Takenuma, Abandoned Mire
+1 Shadow of Mortality
+1 Lórien Revealed
+1 Troll of Khazad-dûm
+1 Faerie Dreamthief
+1 Spyglass Siren
+1 Undercity Sewers
+1 Hydroelectric Specimen
+1 Sink into Stupor
+1 Boggart Trawler
+1 Fell the Profane
+1 Flare of Denial
+1 Flare of Malice
+1 Into the Flood Maw
+1 Mockingbird
+1 Unable to Scream
+1 Kaito, Bane of Nightmares
+1 Gloomlake Verge
+1 Starting Town
+1 Multiversal Passage
+1 Flitterwing Nuisance
+1 Moonshadow
+1 Hydroponics Architect
+1 Dream Beavers
+1 Splinter, Hamato Yoshi

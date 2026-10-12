@@ -82,8 +82,12 @@ button, .file-btn {
 .pip { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
 .pip.W { background: #f6f0d8; } .pip.U { background: #3d7cc9; } .pip.B { background: #3a3238; } .pip.R { background: #d4512f; } .pip.G { background: #2f8a4a; }
 
-.opponents { display: flex; flex-direction: column; gap: .7rem; max-height: 260px; overflow: auto; }
+.opponents { display: flex; flex-direction: column; gap: .7rem; max-height: 340px; overflow: auto; }
 .opp-group > .check { font-weight: 600; }
+.opp-hint { margin: 0 0 .6rem; }
+.other-formats summary { cursor: pointer; color: var(--ink-soft); font-size: .9rem; }
+.other-formats[open] summary { margin-bottom: .5rem; }
+.other-formats .opp-group + .opp-group, .opponents > .opp-group + .opp-group { margin-top: .7rem; }
 .opp-group .list { display: grid; grid-template-columns: 1fr 1fr; gap: .15rem .6rem; margin: .3rem 0 0 1.3rem; }
 @media (max-width: 420px) { .opp-group .list { grid-template-columns: 1fr; } }
 

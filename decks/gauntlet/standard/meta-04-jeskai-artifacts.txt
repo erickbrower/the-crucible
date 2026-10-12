@@ -1,0 +1,26 @@
+# Jeskai Artifacts: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 57.3% win rate over 23,000 matches. This list: 58.2% over 140 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/2398/jeskai-artifacts/AAQAAQa66wGuogGcjSueuArK6AcTAardLQGu_ywLjAX_-Cxvs5sB2bYD0IAEZPP1AtsPrt4HUAEFiAUA
+Name Jeskai Artifacts
+
+Deck
+5 Plains
+4 Island
+1 Sacred Foundry
+1 Authority of the Consuls
+4 Clay-Fired Bricks
+4 Spring-Loaded Sawblades
+3 Braided Net
+2 Meticulous Archive
+4 Simulacrum Synthesizer
+1 Fomori Vault
+4 Floodfarm Verge
+4 Perilous Snare
+4 Repurposing Bay
+4 United Battlefront
+1 The Fire Crystal
+4 Starting Town
+4 Pinnacle Starcage
+4 Cryogen Relic
+1 Adagia, Windswept Bastion
+1 Uthros, Titanic Godcore

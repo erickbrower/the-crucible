@@ -1,0 +1,49 @@
+# Bristly Bill, Spine Sower: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of Mono-Green Landfall (53.9% in Standard).
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Bristly Bill, Spine Sower
+
+Commander
+1 Bristly Bill, Spine Sower
+
+Deck
+1 Bushwhack
+1 Defend the Rider
+1 Hard-Hitting Question
+1 Ixalli's Lorekeeper
+1 Llanowar Elves
+1 Meltstrider's Resolve
+1 Rapid Rescue
+1 Sazh's Chocobo
+1 Snakeskin Veil
+1 Virulent Emissary
+1 Bejeweled Warg
+1 Dredger's Insight
+1 Keen-Eyed Curator
+1 Shared Roots
+1 Tifa Lockhart
+1 Tigra, Feline Fury
+1 Ancient Cornucopia
+1 Earthbender Ascension
+1 Formidable Speaker
+1 Mossborn Hydra
+1 Pugnacious Hammerskull
+1 Regal Imperiosaur
+1 Simulacrum Shaper
+1 Springbloom Druid
+1 Traveling Chocobo
+1 Hexhaven Invigorator
+1 Icetill Explorer
+1 Kona, Rescue Beastie
+1 Leatherhead, Swamp Stalker
+1 Mightform Harmonizer
+1 Ouroboroid
+1 Craterhoof Behemoth
+1 Ghalta, Stampede Tyrant
+1 Sapling Nursery
+1 Ghalta the Unstoppable
+1 Ghalta, Primal Hunger
+1 Ba Sing Se
+1 Evendo, Waking Haven
+21 Forest

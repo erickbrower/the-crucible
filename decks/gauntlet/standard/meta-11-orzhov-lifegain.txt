@@ -1,0 +1,23 @@
+# Orzhov Lifegain: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 54.0% win rate over 35,000 matches. This list: 62.9% over 140 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/291/orzhov-lifegain/AAQAAQADv8oxu_YPpc4DArOfMv_vEgyIBbZ06JkCsPEprVHc7AOjA7hYu7gDk4EDlN4HhdQEAAA
+Name Orzhov Lifegain
+
+Deck
+4 Plains
+4 Godless Shrine
+4 Concealed Courtyard
+4 Amalia Benavides Aguirre
+4 Case of the Uneaten Feast
+4 Starscape Cleric
+4 Lunar Convocation
+2 Sheltered by Ghosts
+4 Hinterland Sanctifier
+3 Raise the Past
+4 Bleachbone Verge
+4 Starting Town
+4 Haliya, Guided by Light
+2 Multiversal Passage
+4 Enlightened Confidant
+2 Ajani Resolute
+3 Liliana the Faultless

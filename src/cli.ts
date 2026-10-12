@@ -1,13 +1,14 @@
 #!/usr/bin/env tsx
 // Usage:
-//   npm run sim -- match <deckA.txt> <deckB.txt> [--games 500] [--format standard|brawl] [--turns 20] [--seed 1]
-//   npm run sim -- gauntlet <deck.txt> [<gauntlet dir>] [--games 300]
+//   npm run sim -- match <deckA.txt> <deckB.txt> [--games 500] [--format standard|standard-brawl|brawl] [--turns 20] [--seed 1]
+//   npm run sim -- gauntlet <deck.txt> [<gauntlet dir>] [--games 300]     (default dir: the deck's own format's gauntlet)
 //   npm run sim -- coverage <deck.txt>
 //   npm run sim -- trace <deckA.txt> <deckB.txt> [--seed 1]
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadDeck, deckCoverage, LoadedDeck } from './sim/deck.js';
 import { runMatch, pct, wilson, MatchOptions } from './sim/match.js';
+import { Format, FORMAT_LABEL, deckFormat, engineRules, gauntletDir, parseFormat } from './sim/format.js';
 
 function parseArgs(argv: string[]) {
   const pos: string[] = [];
@@ -29,12 +30,14 @@ function load(file: string): LoadedDeck {
   return d;
 }
 
-function guessFormat(d: LoadedDeck): 'standard' | 'brawl' { return d.list.commander ? 'brawl' : 'standard'; }
+function formatOf(d: LoadedDeck, flags: Record<string, string>): Format {
+  return flags.format ? parseFormat(flags.format) : deckFormat(d.list);
+}
 
-function matchOpts(flags: Record<string, string>, fmt: 'standard' | 'brawl'): MatchOptions {
+function matchOpts(flags: Record<string, string>, fmt: Format): MatchOptions {
   return {
     games: +(flags.games ?? 500),
-    format: (flags.format as 'standard' | 'brawl') ?? fmt,
+    format: engineRules(fmt),
     maxTurns: +(flags.turns ?? 25),
     seed: +(flags.seed ?? 1),
   };
@@ -56,7 +59,7 @@ function main() {
   const cmd = pos[0];
   if (cmd === 'match' || cmd === 'trace') {
     const A = load(pos[1]), B = load(pos[2]);
-    const o = matchOpts(flags, guessFormat(A));
+    const o = matchOpts(flags, formatOf(A, flags));
     if (cmd === 'trace') { o.games = 1; o.trace = true; }
     const r = runMatch(A.list, B.list, o);
     if (cmd === 'trace') console.log(r.traces[0].join('\n'));
@@ -65,8 +68,9 @@ function main() {
   }
   if (cmd === 'gauntlet') {
     const A = load(pos[1]);
-    const dir = pos[2] ?? 'decks/gauntlet';
-    const o = matchOpts({ games: '300', ...flags }, guessFormat(A));
+    const fmt = formatOf(A, flags);
+    const dir = pos[2] ?? gauntletDir(fmt);
+    const o = matchOpts({ games: '300', ...flags }, fmt);
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.txt')).sort();
     const rows: string[] = [];
     let tw = 0, tg = 0;
@@ -75,11 +79,11 @@ function main() {
       const r = runMatch(A.list, B.list, o);
       tw += r.wins[0]; tg += r.games;
       const [lo, hi] = wilson(r.wins[0], r.games);
-      rows.push(`${B.list.name.padEnd(28)} ${pct(r.wins[0], r.games).padStart(6)}  (CI ${lo.toFixed(0)}-${hi.toFixed(0)}%)  avg turns ${r.avgTurns.toFixed(1)}`);
+      rows.push(`${B.list.name.slice(0, 40).padEnd(40)} ${pct(r.wins[0], r.games).padStart(6)}  (CI ${lo.toFixed(0)}-${hi.toFixed(0)}%)  avg turns ${r.avgTurns.toFixed(1)}`);
     }
-    console.log(`\n${A.list.name} vs gauntlet (${o.games} games each, ${o.format})`);
+    console.log(`\n${A.list.name} vs ${dir} (${o.games} games each, ${FORMAT_LABEL[fmt]})`);
     rows.forEach(r => console.log('  ' + r));
-    console.log(`  ${'OVERALL'.padEnd(28)} ${pct(tw, tg).padStart(6)}`);
+    console.log(`  ${'OVERALL'.padEnd(40)} ${pct(tw, tg).padStart(6)}`);
     return;
   }
   if (cmd === 'coverage') {

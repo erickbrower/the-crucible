@@ -1,0 +1,101 @@
+# Teferi, Time Raveler: Untapped.gg Competitive Brawl Bo1, tier B (rank 7 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/2407/teferi-time-raveler/AAQB-8cUAQFa-AXTBNMB_wUxigT1CMMB5AT_CKQBgyKwATrGCqIFiwGCK_MT1ARVhwSvEJwEHjPWAR3gAv4ngRDkFLgXHp0BHRnGBMMrmgc8pgTythY-tG7OEMEEzjmJgAMEUshOowib-wGmAfJ2-FmPBwbJ5QLRbJGZBZ8B_gT8ggLSAULLW6ABxxGwQAYPqgIFD-sEp5oDl_4GsucHNUCcdMkD0RGEaty7AfkvwQPRBQAAAYgFAQWMBQA
+Name Teferi, Time Raveler
+
+Commander
+1 Teferi, Time Raveler
+
+Deck
+4 Plains
+5 Island
+1 Counterspell
+1 Preordain
+1 Stifle
+1 Ponder
+1 Mana Leak
+1 Swords to Plowshares
+1 Reflecting Pool
+1 Force of Will
+1 Adarkar Wastes
+1 Force Spike
+1 Memory Lapse
+1 Brainstorm
+1 Flusterstorm
+1 Command Tower
+1 Daze
+1 Hallowed Fountain
+1 Spell Snare
+1 Glacial Fortress
+1 Mana Drain
+1 Library of Alexandria
+1 Strip Mine
+1 Enlightened Tutor
+1 Chrome Mox
+1 Flooded Strand
+1 Polluted Delta
+1 Windswept Heath
+1 Remand
+1 Mana Tithe
+1 Parallax Wave
+1 Oust
+1 Seachrome Coast
+1 Gemstone Caverns
+1 Arid Mesa
+1 Spell Pierce
+1 Scalding Tarn
+1 Misty Rainforest
+1 Marsh Flats
+1 Snapcaster Mage
+1 Unexpectedly Absent
+1 Dig Through Time
+1 Treasure Cruise
+1 Containment Priest
+1 Brazen Borrower
+1 Mystical Dispute
+1 Drannith Magistrate
+1 Force of Negation
+1 Prismatic Vista
+1 Fierce Guardianship
+1 Solitude
+1 Subtlety
+1 Esper Sentinel
+1 Prismatic Ending
+1 Portable Hole
+1 Dennick, Pious Apprentice
+1 Deserted Beach
+1 Wash Away
+1 March of Otherworldly Light
+1 Eiganjo, Seat of the Empire
+1 Otawara, Soaring City
+1 Patriar's Humiliation
+1 Lay Down Arms
+1 Reprieve
+1 Stern Scolding
+1 The One Ring
+1 Get Lost
+1 Malcolm, Alluring Scoundrel
+1 Tishana's Tidebinder
+1 No More Lies
+1 Meticulous Archive
+1 Tome of Gadwick
+1 Razorgrass Ambush
+1 Witch Enchanter
+1 Sink into Stupor
+1 Ocelot Pride
+1 Phelia, Exuberant Shepherd
+1 Static Prison
+1 Disruptor Flute
+1 Floodfarm Verge
+1 Cloud, Midgar Mercenary
+1 Seam Rip
+1 Consult the Star Charts
+1 Quantum Riddler
+1 Wan Shi Tong, Librarian
+1 Aang, Swift Savior
+1 Multiversal Passage
+1 Hydroponics Architect
+1 Erode
+1 Unbreakable Remnant
+1 The Wondrous Wasp
+1 Gleaming Bastion

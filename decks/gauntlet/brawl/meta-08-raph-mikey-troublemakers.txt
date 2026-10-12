@@ -1,0 +1,77 @@
+# Raph & Mikey, Troublemakers: Untapped.gg Competitive Brawl Bo1, tier B (rank 8 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/5223/raph--mikey-troublemakers/AAQBj7hDAQFChwXcBI0BwAa7A78EfN45ywGmBuIErgaGEu8CqSf_GNos2QWzEs4c0Qr8E6MI0gWsC-z8BImeBhKbEdDRAiHzNpq8AzCs2wSfA5wBwyyYP51J4LkCvvIE0r0D-wHkF2fajgX1AfvjAdwuBGivVrE8tQK7tQOaAsr5BgiuCHLlkgiMSO0-0a8C5RsAAAACE-BbDlwA
+Name Raph & Mikey, Troublemakers
+
+Commander
+1 Raph & Mikey, Troublemakers
+
+Deck
+1 Forest
+1 Lightning Bolt
+1 Ulamog, the Infinite Gyre
+1 Rampant Growth
+1 Naturalize
+1 Cultivate
+1 Emrakul, the Aeons Torn
+1 Command Tower
+1 Gruul Signet
+19 Snow-Covered Forest
+1 Into the North
+14 Snow-Covered Mountain
+1 Harrow
+1 Utopia Sprawl
+1 Stomping Ground
+1 Rootbound Crag
+1 Chain Lightning
+1 Talisman of Impulse
+1 Farseek
+1 Flame Slash
+1 Burgeoning
+1 Exploration
+1 Explore
+1 Cavern of Souls
+1 Chromatic Lantern
+1 Gruul Guildgate
+1 Temple of Abandon
+1 Abrade
+1 Broken Bond
+1 Grow from the Ashes
+1 Demanding Dragon
+1 Lava Coil
+1 Circuitous Route
+1 Open the Gates
+1 Return to Nature
+1 Domri, Anarch of Bolas
+1 Irencrag Feat
+1 Castle Garenbrig
+1 Arcane Signet
+1 Omen of the Hunt
+1 Migration Path
+1 Vastwood Surge
+1 Highland Forest
+1 Tamiyo's Safekeeping
+1 The Weatherseed Treaty
+1 Wooded Ridgeline
+1 Obliterating Bolt
+1 Bushwhack
+1 Etali, Primal Conqueror
+1 Invasion of Zendikar
+1 Return from the Wilds
+1 Ghalta, Stampede Tyrant
+1 Glimpse the Core
+1 Spelunking
+1 They Went This Way
+1 Map the Frontier
+1 Bristling Backwoods
+1 Moldering Gym // Weight Room
+1 Thornspire Verge
+1 Encroaching Dragonstorm
+1 Heritage Reclamation
+1 Fire Magic
+1 Suplex
+1 Song of Seasons
+1 Shared Roots
+1 Sear
+1 World War Hulk
+1 Galactus, Devourer of Worlds

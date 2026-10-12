@@ -1,0 +1,49 @@
+# Haliya, Guided by Light: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of Mono-White Lifegain and Mono-White Auras (54.7% / 57.7% in Standard).
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Haliya, Guided by Light
+
+Commander
+1 Haliya, Guided by Light
+
+Deck
+1 Aunt May
+1 Authority of the Consuls
+1 Erode
+1 Ethereal Armor
+1 Healer's Hawk
+1 Hinterland Sanctifier
+1 Leonin Vanguard
+1 Liliana the Faultless
+1 Optimistic Scavenger
+1 Restoration Magic
+1 Ruin-Lurker Bat
+1 Seam Rip
+1 Shardmage's Rescue
+1 Veteran Survivor
+1 Ajani's Pridemate
+1 Enlightened Confidant
+1 Essence Channeler
+1 Feather of Flight
+1 Get Lost
+1 Giada, Font of Hope
+1 Gideon's Memorial
+1 Leonardo, Cutting Edge
+1 Origin of Spider-Man
+1 Sheltered by Ghosts
+1 Spellbook Vendor
+1 Unflinching Hortimancer
+1 Voice of Victory
+1 Banishing Light
+1 Enduring Innocence
+1 Inspiring Overseer
+1 Perilous Snare
+1 Pinnacle Starcage
+1 Split Up
+1 Exemplar of Light
+1 Leyline of Hope
+1 United Battlefront
+1 Abandoned Air Temple
+1 Adagia, Windswept Bastion
+21 Plains

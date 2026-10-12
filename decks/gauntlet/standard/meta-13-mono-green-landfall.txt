@@ -1,0 +1,20 @@
+# Mono-Green Landfall: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 53.9% win rate over 32,000 matches. This list: 58.5% over 190 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/1397/mono-green-landfall/AAQAAQAC_VKiii0E5pYu2r4K9uQHHAeAFfOQGcD7GOizBjfs2AisQAEQhwUA
+Name Mono-Green Landfall
+
+Deck
+16 Forest
+4 Llanowar Elves
+2 Evolving Wilds
+4 Fabled Passage
+2 Escape Tunnel
+3 Bristly Bill, Spine Sower
+4 Mossborn Hydra
+4 Sazh's Chocobo
+3 Tifa Lockhart
+4 Traveling Chocobo
+3 Icetill Explorer
+3 Ouroboroid
+4 Earthbender Ascension
+4 Sapling Nursery

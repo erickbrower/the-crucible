@@ -1,0 +1,17 @@
+# Mono-White Lifegain: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 54.7% win rate over 35,000 matches. This list: 63.9% over 150 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/215/mono-white-lifegain/AAQAAQAAAAqZkwGI7Qy40QKYrRzrwAS2Ci37U7WxBq3mBwEUiAUA
+Name Mono-White Lifegain
+
+Deck
+20 Plains
+4 Ajani's Pridemate
+4 Leonin Vanguard
+4 Healer's Hawk
+4 Ruin-Lurker Bat
+4 Essence Channeler
+4 Leyline of Hope
+4 Sheltered by Ghosts
+4 Hinterland Sanctifier
+4 Restoration Magic
+4 Haliya, Guided by Light

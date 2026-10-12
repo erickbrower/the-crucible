@@ -1,0 +1,16 @@
+# Mono-White Auras: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 57.7% win rate over 81,000 matches. This list: 55.7% over 200 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/304/mono-white-auras/AAQAAQAAAAnnvwKJkSry7gS6Ch8EkOwOwYkBoOsBARiIBQA
+Name Mono-White Auras
+
+Deck
+24 Plains
+4 Ethereal Armor
+4 Spellbook Vendor
+4 Feather of Flight
+4 Optimistic Scavenger
+4 Shardmage's Rescue
+4 Sheltered by Ghosts
+4 Seam Rip
+4 Skyward Spider
+4 Origin of Spider-Man

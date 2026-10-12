@@ -1,0 +1,21 @@
+# Orzhov Sacrifice: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 55.0% win rate over 13,000 matches. This list: 56.3% over 2,100 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/352/orzhov-sacrifice/AAQAAQAAAA-IBbZ06JkCrMUq4cYEeCWltgO68QK28AeViAHquALlAfWPAQQAAA
+Name Orzhov Sacrifice
+
+Deck
+4 Plains
+4 Godless Shrine
+4 Concealed Courtyard
+4 Snarling Gorehound
+4 Raise the Past
+4 Infestation Sage
+4 Vengeful Bloodwitch
+4 Bleachbone Verge
+4 Voice of Victory
+4 Umbral Collar Zealot
+4 Multiversal Passage
+4 Lake-town Lookout
+4 The Sackville-Bagginses
+4 Dark Matter Manipulator
+4 Darklight Phoenix

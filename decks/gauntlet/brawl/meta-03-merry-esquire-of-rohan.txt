@@ -1,0 +1,101 @@
+# Merry, Esquire of Rohan: Untapped.gg Competitive Brawl Bo1, tier A (rank 3 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/3349/merry-esquire-of-rohan/AAQBwvoqAQFarQO2BvYC_wmTAuYH_gXYKN0EhiLoK7EBnQVVthScBFHzAZYCSq8kmwPRPLsBNv8FjQnCFKchqAL1Hr3eCpqdDI8VCLcy1QY-hYADFz-dXtvxAq1bEKE_nqYCuVXWyQOTSeCTAZgEnQUr0I0C_AGsUZIHkgT5Tb4CD4wCF5YCSpn_AeKIASHVDvQDCp1PjbYDn_EClgLYBJwBzwfnrQWJrwKLMvdZ4CzbvQE7zgfPaJwDgiAAAAHiCQEFiAUA
+Name Merry, Esquire of Rohan
+
+Commander
+1 Merry, Esquire of Rohan
+
+Deck
+1 Blood Moon
+5 Plains
+4 Mountain
+1 Lightning Bolt
+1 Thalia, Guardian of Thraben
+1 Swords to Plowshares
+1 Wooded Foothills
+1 Mother of Runes
+1 Battlefield Forge
+1 Isamaru, Hound of Konda
+1 Command Tower
+1 Magus of the Moon
+1 Pyrokinesis
+1 Chain Lightning
+1 Library of Alexandria
+1 Strip Mine
+1 Chrome Mox
+1 Flooded Strand
+1 Windswept Heath
+1 Mana Tithe
+1 Bloodstained Mire
+1 Parallax Wave
+1 Sacred Foundry
+1 Flame Slash
+1 Arid Mesa
+1 Scalding Tarn
+1 Marsh Flats
+1 Clifftop Retreat
+1 Cavern of Souls
+1 Chained to the Rocks
+1 Zurgo Bellstriker
+1 Kytheon, Hero of Akros
+1 Inspiring Vantage
+1 Mox Amber
+1 Drannith Magistrate
+1 Prismatic Vista
+1 Sunbaked Canyon
+1 Skyclave Apparition
+1 Needleverge Pathway
+1 Deflecting Swat
+1 Solitude
+1 Fury
+1 Esper Sentinel
+1 Den of the Bugbear
+1 Sundown Pass
+1 Eiganjo, Seat of the Empire
+1 Sokenzan, Crucible of Defiance
+1 Rahilda, Wanted Cutthroat
+1 Patriar's Humiliation
+1 Squee, Dubious Monarch
+1 Laelia, the Blade Reforged
+1 Skrelv, Defector Mite
+1 Invasion of Gobakhan
+1 Lithomantic Barrage
+1 Flowering of the White Tree
+1 Reprieve
+1 Inti, Seneschal of the Sun
+1 Anim Pakal, Thousandth Moon
+1 Delney, Streetwise Lookout
+1 Elegant Parlor
+1 Gut, True Soul Zealot
+1 Witch Enchanter
+1 Phelia, Exuberant Shepherd
+1 Static Prison
+1 Detective's Phoenix
+1 Ghostfire Slice
+1 Phlage, Titan of Fire's Fury
+1 Arena of Glory
+1 Shove Aside
+1 Ruby Collector
+1 Switchgrass Grazer
+1 Norin, Swift Survivalist
+1 Maddening Hex
+1 Broadside Bombardiers
+1 Kellan, Planar Trailblazer
+1 Sunbillow Verge
+1 Voice of Victory
+1 Tersa Lightshatter
+1 Cloud, Midgar Mercenary
+1 Zack Fair
+1 Starting Town
+1 Pyrogoyf
+1 Kari Zev, Crew of Two
+1 Stormforged Armor
+1 Multiversal Passage
+1 Hexing Squelcher
+1 Spectacular Spider-Man
+1 Spider-Punk
+1 Leonardo, Leader in Blue
+1 Quicksilver, Brash Blur
+1 Super-Adaptoid
+1 General Thunderbolt Ross

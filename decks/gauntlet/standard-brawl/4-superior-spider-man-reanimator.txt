@@ -1,0 +1,56 @@
+# Superior Spider-Man: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of 4-Color and Sultai Reanimator (58.7% / 58.4% in Standard), cut down to blue-black.
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Superior Spider-Man
+
+Commander
+1 Superior Spider-Man
+
+Deck
+1 Dark Matter Manipulator
+1 Duress
+1 Infestation Sage
+1 Into the Flood Maw
+1 Iridescent Vinelasher
+1 Opt
+1 Sleight of Hand
+1 Spell Pierce
+1 Spell Snare
+1 Spyglass Siren
+1 Bitter Triumph
+1 Consult the Star Charts
+1 Cryogen Relic
+1 Floodpits Drowner
+1 Shoot the Sheriff
+1 Starscape Cleric
+1 The Sackville-Bagginses
+1 Umbral Collar Zealot
+1 Vengeful Bloodwitch
+1 Corpses of the Lost
+1 Kiora, the Rising Tide
+1 Moseo, Vein's New Dean
+1 Repurposing Bay
+1 Seasoned Cryomancer
+1 Simulacrum Synthesizer
+1 Stock Up
+1 Unstoppable Slasher
+1 Darklight Phoenix
+1 Enduring Curiosity
+1 The Theorist, Jace Beleren
+1 Overlord of the Balemurk
+1 Deceit
+1 Eddymurk Crab
+1 Ardyn, the Usurper
+1 Bringer of the Last Gift
+1 Sunderflock
+1 Watery Grave
+1 Gloomlake Verge
+1 Mistrise Village
+1 Restless Reef
+1 Theorist's Sanctum
+1 Undercity Sewers
+1 Realm of Koh
+1 Shipwreck Marsh
+8 Island
+7 Swamp

@@ -1,0 +1,56 @@
+# Amalia Benavides Aguirre: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of Orzhov Lifegain and Orzhov Sacrifice (54.0% / 55.0% in Standard).
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Amalia Benavides Aguirre
+
+Commander
+1 Amalia Benavides Aguirre
+
+Deck
+1 Authority of the Consuls
+1 Case of the Uneaten Feast
+1 Dark Matter Manipulator
+1 Duress
+1 Erode
+1 Ethereal Armor
+1 Greedy Freebooter
+1 Hinterland Sanctifier
+1 Infestation Sage
+1 Iridescent Vinelasher
+1 Lake-town Lookout
+1 Liliana the Faultless
+1 Seam Rip
+1 Shardmage's Rescue
+1 Snarling Gorehound
+1 Veteran Survivor
+1 Ajani Resolute
+1 Bitter Triumph
+1 Enlightened Confidant
+1 Feather of Flight
+1 Feed the Swarm
+1 Lunar Convocation
+1 Sheltered by Ghosts
+1 Shoot the Sheriff
+1 Spellbook Vendor
+1 Starscape Cleric
+1 The Sackville-Bagginses
+1 Umbral Collar Zealot
+1 Vengeful Bloodwitch
+1 Voice of Victory
+1 Corpses of the Lost
+1 Haliya, Guided by Light
+1 Moseo, Vein's New Dean
+1 Unstoppable Slasher
+1 Darklight Phoenix
+1 Raise the Past
+1 Godless Shrine
+1 Bleachbone Verge
+1 Concealed Courtyard
+1 Abandoned Air Temple
+1 Shattered Sanctum
+1 Adagia, Windswept Bastion
+1 Dalkovan Encampment
+1 Realm of Koh
+8 Plains
+7 Swamp

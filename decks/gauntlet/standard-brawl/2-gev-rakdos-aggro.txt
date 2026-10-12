@@ -1,0 +1,56 @@
+# Gev, Scaled Scorch: Standard Brawl prototype built for the Crucible gauntlet on 2026-10-12.
+# Untapped.gg does not track Standard Brawl, so this is a 60-card singleton version of Rakdos Aggro and Mono-Red Burn (53.9% / 54.7% in Standard).
+# Cards: the archetype's own list first, then the most-played Standard cards on Untapped in these colors
+# that the engine fully models. Every card is Standard-legal per Forge's Sep 29, 2026 Standard list.
+Name Gev, Scaled Scorch
+
+Commander
+1 Gev, Scaled Scorch
+
+Deck
+1 Boltwave
+1 Burst Lightning
+1 Dark Matter Manipulator
+1 Duress
+1 Flashback
+1 Fleeting Effigy
+1 Greedy Freebooter
+1 Hired Claw
+1 Impractical Joke
+1 Infestation Sage
+1 Iridescent Vinelasher
+1 Shock
+1 Snarling Gorehound
+1 Tectonic Hazard
+1 Abrade
+1 Bitter Triumph
+1 Emberheart Challenger
+1 Feed the Swarm
+1 Fireglass Mentor
+1 Flamecache Gecko
+1 Lightning Strike
+1 Master of Barbs
+1 Shoot the Sheriff
+1 Slickshot Show-Off
+1 Starscape Cleric
+1 Stingerquill Charm
+1 The Sackville-Bagginses
+1 Umbral Collar Zealot
+1 Vengeful Bloodwitch
+1 Avengers Disassembled
+1 Corpses of the Lost
+1 Ingris Stingerquill
+1 Moseo, Vein's New Dean
+1 Unstoppable Slasher
+1 Valley Flamecaller
+1 Darklight Phoenix
+1 Blood Crypt
+1 Blazemire Verge
+1 Rockface Village
+1 Cori Mountain Monastery
+1 Realm of Koh
+1 Haunted Ridge
+1 The Lonely Mountain
+1 Dark Fortress
+8 Mountain
+7 Swamp
