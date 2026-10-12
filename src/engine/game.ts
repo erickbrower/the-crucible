@@ -67,6 +67,9 @@ export class Game {
   resolvingDepth = 0;
   inPriority = false;              // true while the priority loop is running (responses just push)
   stats = { damage: [0, 0], cast: [0, 0], countered: [0, 0], fizzled: [0, 0], commanderCasts: [0, 0], drawn: [0, 0], turnsWithVenom: [0, 0] };
+  /** Card names each player had in hand (kept opening hand or drawn) and cast or played, for per-card win rates. */
+  cardsSeen: [Set<string>, Set<string>] = [new Set(), new Set()];
+  cardsCast: [Set<string>, Set<string>] = [new Set(), new Set()];
 
   constructor(decks: [DeckList, DeckList], opts: GameOptions) {
     this.opts = opts;
@@ -106,7 +109,7 @@ export class Game {
   // ------------------------------------------------------------------ game flow
   play(): { winner: number | undefined; turns: number } {
     const first = this.opts.firstPlayer ?? this.rng.int(2);
-    for (const p of this.players) this.mulligan(p);
+    for (const p of this.players) { this.mulligan(p); for (const c of p.hand) this.cardsSeen[p.id].add(c.def.name); }
     this.active = first;
     let t = 0;
     while (!this.over && t < this.opts.maxTurns * 2) {
@@ -204,7 +207,7 @@ export class Game {
       if (!c) { if (!opening) this.lose(pid, 'decked'); return; }
       p.hand.push(c);
       if (!opening) {
-        p.drawnThisTurn++; this.stats.drawn[pid]++;
+        p.drawnThisTurn++; this.stats.drawn[pid]++; this.cardsSeen[pid].add(c.def.name);
         this.emit({ type: 'drawn', player: pid, nth: p.drawnThisTurn, card: c });
       }
     }
@@ -658,7 +661,7 @@ export class Game {
   // ------------------------------------------------------------------ lands
   playLand(p: Player, c: CardInst, wantUntapped: boolean) {
     p.hand.splice(p.hand.indexOf(c), 1);
-    p.landsPlayed++;
+    p.landsPlayed++; this.cardsCast[p.id].add(c.def.name);
     const land = c.def.land!;
     let tapped = false;
     switch (land.entersTapped) {
@@ -705,7 +708,7 @@ export class Game {
     else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
     else if (opts.fromExile) { p.exile.splice(p.exile.indexOf(c), 1); p.warpExile = p.warpExile!.filter(w => w.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
-    p.spellsThisTurn++; this.stats.cast[pid]++;
+    p.spellsThisTurn++; this.stats.cast[pid]++; this.cardsCast[pid].add(c.def.name);
     const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, modes,
       gift: c.def.keywords.includes('Gift') && AI.promiseGift(this, pid, c) };
     const isCreature = c.def.types.includes('Creature');
