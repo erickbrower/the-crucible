@@ -28,6 +28,7 @@ export interface SpellStep { effect: Effect; targets?: Target[] }
 export interface StackItem {
   card: CardInst; controller: number; x: number; kicked: boolean; fromCommand?: boolean;
   sneak?: boolean;                 // cast for its sneak cost: a permanent enters tapped and attacking
+  impending?: boolean;             // cast for its impending cost: enters with time counters, not a creature
   flashback?: boolean;             // cast from the graveyard; exiled instead of going anywhere else
   warp?: boolean;                  // cast for its warp cost: exiled at the next end step
   gift?: boolean;                  // gift promised to the opponent
@@ -67,6 +68,8 @@ export class Game {
   over = false;
   log: string[] = [];
   stack: StackItem[] = [];
+  /** Additional combat phases still to come this turn, each with an optional effect that runs as it begins. */
+  extraCombats: { eff?: Effect; ctx?: Ctx }[] = [];
   opts: GameOptions;
   phase = 'setup';
   pendingTriggers: { trig: Trigger; perm: Perm | CardInst; controller: number; event: GEvent }[] = [];
@@ -156,6 +159,7 @@ export class Game {
         if (!perm.noUntap) perm.tapped = false;
         perm.sick = false;
       }
+      perm.attacksThisTurn = 0;
     }
     this.phase = 'upkeep';
     this.emit({ type: 'phase', phase: 'Upkeep', player: this.active });
@@ -168,10 +172,21 @@ export class Game {
     this.emit({ type: 'phase', phase: 'Main1', player: this.active });
     AI.mainPhase(this, a, 1);
     if (this.over) return;
-    this.phase = 'combat';
-    this.emit({ type: 'phase', phase: 'BeginCombat', player: this.active });
-    this.combat();
-    if (this.over) return;
+    // combat, then any additional combat phases (Aurelia, Bumi...); a setup effect runs as that combat begins
+    this.extraCombats = [];
+    let setup: { eff?: Effect; ctx?: Ctx } | undefined;
+    for (let n = 0; n < 6; n++) {
+      this.phase = 'combat';
+      if (n) this.trace('additional combat phase');
+      this.emit({ type: 'phase', phase: 'BeginCombat', player: this.active });
+      if (this.over) return;
+      if (setup?.eff && setup.ctx) this.resolveEffect(setup.eff, setup.ctx);
+      this.combat();
+      if (this.over) return;
+      setup = this.extraCombats.shift();
+      if (!setup) break;
+    }
+    this.extraCombats = [];
     this.phase = 'main2';
     AI.mainPhase(this, a, 2);
     if (this.over) return;
@@ -1957,6 +1972,7 @@ export class Game {
     this.players[ap].attackedThisTurn = true;
     for (const a of attackers) {
       a.attacking = true;
+      a.attacksThisTurn = (a.attacksThisTurn ?? 0) + 1;
       if (!this.has(a, 'Vigilance')) a.tapped = true;
     }
     this.trace(`attacks with ${attackers.map(a => a.def.name).join(', ')}`);
