@@ -8,6 +8,16 @@ export interface MatchOptions {
   maxTurns: number;
   seed: number;
   trace?: boolean;
+  /** Called after each game with the number of games finished so far. */
+  onProgress?: (done: number, total: number) => void;
+}
+
+/** Per-card results for deck A (player 0), keyed by card name. */
+export interface CardStat {
+  seen: number;      // games where the card was in hand at some point (kept opener or drawn)
+  seenWins: number;
+  cast: number;      // games where it was cast (spells) or played (lands)
+  castWins: number;
 }
 
 export interface MatchResult {
@@ -23,12 +33,13 @@ export interface MatchResult {
   avgCountered: [number, number];
   avgMulligans: [number, number];
   traces: string[][];
+  cards: Record<string, CardStat>;
 }
 
 export function runMatch(a: DeckList, b: DeckList, opts: MatchOptions): MatchResult {
   const r: MatchResult = {
     decks: [a.name, b.name], games: opts.games, wins: [0, 0], draws: 0, onPlay: [0, 0], onPlayGames: [0, 0],
-    avgTurns: 0, avgWinTurn: [0, 0], avgDamage: [0, 0], avgCountered: [0, 0], avgMulligans: [0, 0], traces: [],
+    avgTurns: 0, avgWinTurn: [0, 0], avgDamage: [0, 0], avgCountered: [0, 0], avgMulligans: [0, 0], traces: [], cards: {},
   };
   const winTurns: [number[], number[]] = [[], []];
   for (let i = 0; i < opts.games; i++) {
@@ -50,6 +61,16 @@ export function runMatch(a: DeckList, b: DeckList, opts: MatchOptions): MatchRes
       r.avgMulligans[p] += g.players[p].mulligans;
     }
     if (opts.trace) r.traces.push(g.log);
+    const won = res.winner === 0 ? 1 : 0;
+    for (const name of g.cardsSeen[0]) {
+      const c = (r.cards[name] ??= { seen: 0, seenWins: 0, cast: 0, castWins: 0 });
+      c.seen++; c.seenWins += won;
+    }
+    for (const name of g.cardsCast[0]) {
+      const c = (r.cards[name] ??= { seen: 0, seenWins: 0, cast: 0, castWins: 0 });
+      c.cast++; c.castWins += won;
+    }
+    opts.onProgress?.(i + 1, opts.games);
   }
   const n = opts.games;
   r.avgTurns /= n;

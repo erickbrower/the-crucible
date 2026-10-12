@@ -46,6 +46,29 @@ Run `SHOW_HANDS=1 npm run sim -- trace ...` to also print both hands each turn.
 Games alternate who goes first. Traces show stack fights as `casts X in response to Y` and `Y fizzles`. The CI column is a 95% Wilson interval, so differences
 inside about ±5% at 300 games are noise.
 
+## Desktop UI
+
+```bash
+npm run ui        # starts a local server and opens http://localhost:4777 in your browser
+```
+
+On Windows you can double-click `Crucible.cmd` instead; the first time it installs packages and
+downloads the Forge card data. Close the console window (or press Ctrl+C) to stop it.
+
+- **Your deck**: pick one of `decks/mine` or paste an Arena export. The panel shows the format,
+  card count, colors, and any cards the engine only partly models. "Save to my decks" writes it to `decks/mine/`.
+- **Opponents**: tick any decks. The gauntlet is checked by default; your own decks work too, which is
+  handy for Brawl since the gauntlet is Standard.
+- **Run gauntlet**: every matchup runs in parallel on a worker thread with its own progress bar, then
+  shows the win rate with its 95% range, on-the-play / on-the-draw split and game length.
+- **How each card performed**: win rate in games where the card reached your hand compared with games
+  where it didn't, centered so the deck's typical card is 0. Sortable; card names link to Scryfall.
+- **Suggested improvements**: needs your collection (`Load collection CSV`, the `arena_collection.csv`
+  export; stored in `data/`, which is git-ignored). It takes the weakest cards, tries owned cards in your
+  colors at a similar mana value, screens every swap quickly, then replays the best few at the full
+  game count and labels each result *likely better*, *likely worse* or *within noise*. "Apply to deck"
+  edits the list in place; run the gauntlet again to make it the new baseline.
+
 ## Deck files
 
 Paste Arena's export directly. Set codes and collector numbers are ignored.
@@ -74,7 +97,8 @@ Deck
 | Filters | `src/engine/filters.ts` | Evaluates Forge "Valid" expressions like `Creature.OppCtrl+powerLE2` |
 | Engine | `src/engine/game.ts` | Turns, mana payment (backtracking solver), a real stack with a priority loop (targets locked on cast, fizzles, counter wars), triggers, static buffs, combat, state-based actions, command zone |
 | AI | `src/ai/policy.ts` | Heuristic play shared by both seats; deck style (aggro/midrange/control) is inferred from the list |
-| Runner / CLI | `src/sim/*.ts`, `src/cli.ts` | Deck parsing, match statistics |
+| Runner / CLI | `src/sim/*.ts`, `src/cli.ts` | Deck parsing, match statistics, per-card win rates |
+| Desktop UI | `src/ui/` | Local HTTP server, worker pool, SSE progress, upgrade search; page in `src/ui/public/` |
 
 Supported effects include damage, destroy, exile (including "until this leaves"), bounce,
 draw, discard, tokens, pumps, ±1/±1 counters, fight, counterspells (with "unless pays"),

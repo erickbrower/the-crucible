@@ -5,6 +5,7 @@
   "scripts": {
     "fetch-cards": "bash scripts/fetch-forge.sh",
     "sim": "tsx src/cli.ts",
+    "ui": "tsx src/ui/server.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

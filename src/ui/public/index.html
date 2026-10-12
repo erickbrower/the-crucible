@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Crucible</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>The Crucible</h1>
+    <p class="tag">Throw a deck in, see what survives the heat.</p>
+    <p class="meta" id="meta"></p>
+  </header>
+
+  <main class="layout">
+    <aside class="rail">
+      <section class="block">
+        <h2>Your deck</h2>
+        <label class="field">
+          <span>Saved decks</span>
+          <select id="deckSelect"><option value="">Paste a deck below…</option></select>
+        </label>
+        <textarea id="deckText" spellcheck="false" placeholder="Paste an Arena export here.&#10;&#10;Commander&#10;1 Eddie Brock&#10;&#10;Deck&#10;1 Llanowar Elves&#10;…"></textarea>
+        <div id="deckInfo" class="deck-info" aria-live="polite"></div>
+        <div class="row">
+          <button id="saveDeck" class="ghost" type="button">Save to my decks</button>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Opponents</h2>
+        <div id="opponents" class="opponents"></div>
+      </section>
+
+      <section class="block">
+        <h2>Settings</h2>
+        <div class="settings">
+          <label class="field"><span>Games per matchup</span><input id="games" type="number" min="20" max="5000" step="50" value="300"></label>
+          <label class="field"><span>Turn limit</span><input id="turns" type="number" min="5" max="60" value="25"></label>
+          <label class="field"><span>Seed</span><input id="seed" type="number" min="1" value="1"></label>
+        </div>
+        <p class="hint">300 games gives roughly ±5% per matchup. Same seed and same deck give the same numbers, so A/B changes are fair.</p>
+      </section>
+
+      <section class="block">
+        <h2>Arena collection</h2>
+        <p id="collectionStatus" class="hint"></p>
+        <label class="file-btn ghost">
+          <input id="collectionFile" type="file" accept=".csv,text/csv">
+          Load collection CSV
+        </label>
+      </section>
+
+      <div class="run-bar">
+        <button id="run" class="primary" type="button">Run gauntlet</button>
+        <button id="cancel" class="ghost" type="button" hidden>Stop</button>
+      </div>
+    </aside>
+
+    <section class="results" id="results">
+      <div class="empty" id="empty">
+        <h2>Nothing in the furnace yet</h2>
+        <p>Pick one of your decks or paste an Arena export, tick the opponents to face, and run the gauntlet. Each matchup gets its own progress bar while it plays.</p>
+      </div>
+
+      <section id="gauntletPanel" class="panel" hidden>
+        <div class="panel-head">
+          <h2 id="gauntletTitle">Gauntlet</h2>
+          <p id="gauntletStatus" class="status"></p>
+        </div>
+        <div id="matchups" class="matchups"></div>
+      </section>
+
+      <section id="cardsPanel" class="panel" hidden>
+        <div class="panel-head">
+          <h2>How each card performed</h2>
+          <label class="check"><input type="checkbox" id="showLands"> Show lands</label>
+        </div>
+        <p class="hint">Impact compares your win rate in games where the card reached your hand with games where it didn't, then sets the deck's typical card to zero, so negative means weaker than average. Cards that only show up in long games can look better or worse than they are, so use it to decide what to test, not as a verdict.</p>
+        <div class="table-wrap"><table id="cardTable" class="cards"></table></div>
+      </section>
+
+      <section id="upgradePanel" class="panel" hidden>
+        <div class="panel-head">
+          <h2>Suggested improvements</h2>
+          <p id="upgradeStatus" class="status"></p>
+        </div>
+        <p class="hint">Takes your weakest cards and tries owned cards in your colors at a similar mana value. Every candidate gets a quick screen, then the best few replay the full gauntlet so the result can be compared with your current list.</p>
+        <div class="upgrade-opts">
+          <label class="field"><span>Weak cards to replace</span><input id="cuts" type="number" min="1" max="10" value="3"></label>
+          <label class="field"><span>Candidates per card</span><input id="perCut" type="number" min="1" max="30" value="8"></label>
+          <label class="field"><span>Finalists to confirm</span><input id="confirm" type="number" min="1" max="20" value="6"></label>
+          <label class="check"><input type="checkbox" id="standardOnly" checked> Standard-legal only</label>
+          <label class="check"><input type="checkbox" id="modeledOnly" checked> Only cards the engine fully plays</label>
+        </div>
+        <div class="row">
+          <button id="findUpgrades" class="primary" type="button">Find upgrades from my collection</button>
+          <button id="cancelUpgrades" class="ghost" type="button" hidden>Stop</button>
+        </div>
+        <div id="swaps" class="swaps"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
