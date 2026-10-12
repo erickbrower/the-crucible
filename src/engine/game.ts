@@ -255,6 +255,11 @@ export class Game {
     if (d.ptStar) { const v = this.starValue(perm); power += v.p; toughness += v.t; }
     const kws = new Set<string>(d.keywords.map(k => k.split(':')[0]));
     perm.tempKw.forEach(k => kws.add(k));
+    // a static whose amount counts creatures ("+1/+0 for each other creature with power 3 or more")
+    // re-enters statsOf; past one level, use printed stats to avoid infinite recursion
+    if (this.statsDepth > 1) return { power, toughness, keywords: [...kws] };
+    this.statsDepth++;
+    try {
     for (const src of this.bf) {
       for (const st of src.def.statics) {
         if (st.mode !== 'Continuous') continue;
@@ -265,8 +270,10 @@ export class Game {
         if (st.params.AddKeyword) st.params.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
       }
     }
+    } finally { this.statsDepth--; }
     return { power, toughness, keywords: [...kws] };
   }
+  private statsDepth = 0;
 
   private starValue(perm: Perm) {
     // Approximations for */* creatures: count creatures you control (Crusader of Odric style) or cards in graveyard.
