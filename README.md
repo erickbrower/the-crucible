@@ -137,5 +137,9 @@ indestructible.
 
 ## License
 
-The simulator code is original. Card data is read at runtime from Forge, which is
-GPL-3.0; it is not redistributed here. Magic: The Gathering is © Wizards of the Coast.
+The simulator code is original and released under the [MIT License](LICENSE).
+
+Card data is read at runtime from [Forge](https://github.com/Card-Forge/forge), which is GPL-3.0.
+It is downloaded by `npm run fetch-cards` and is not redistributed here, so the MIT license covers
+only this repository's own code. Magic: The Gathering and its card names are © Wizards of the Coast;
+this is an unofficial fan project, not affiliated with or endorsed by Wizards.
