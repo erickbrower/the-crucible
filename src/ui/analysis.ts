@@ -4,33 +4,49 @@ import { loadCard, coverage } from '../cards/compile.js';
 import type { CardDef, Color } from '../cards/model.js';
 import type { CardStat } from '../sim/match.js';
 import type { OwnedCard } from './collection.js';
+import { Format, FORMAT_LABEL, FORMAT_SIZE, deckFormat, needsStandardLegal } from '../sim/format.js';
+import { isLegal } from '../cards/formats.js';
 
-export type Format = 'standard' | 'brawl';
+export type { Format };
 
 export interface DeckInfo {
   name: string;
   format: Format;
+  formatLabel: string;
   commander?: string;
   size: number;
+  expectedSize: number;
   colors: Color[];
   missing: string[];                         // not found in Forge data
+  illegal: string[];                         // not legal in the deck's format (Standard sets and bans)
+  duplicates: string[];                      // more than one copy in a singleton format
   unmodeled: { name: string; notes: string[] }[];
   distinct: number;
 }
+
+const BASIC = /^(snow-covered )?(plains|island|swamp|mountain|forest|wastes)$/i;
 
 export function inspectDeck(text: string, fallbackName = 'My deck'): { info: DeckInfo; deck: LoadedDeck } {
   const parsed = parseDeckText(text, fallbackName);
   const deck = buildDeck(parsed);
   const cov = deckCoverage(deck.list);
+  const format = deckFormat(deck.list);
+  const names = [...new Set([parsed.commander, ...parsed.main.map(c => c.name)].filter(Boolean) as string[])];
+  const copies = new Map<string, number>();
+  for (const c of parsed.main) copies.set(c.name, (copies.get(c.name) ?? 0) + c.count);
   return {
     deck,
     info: {
       name: deck.list.name,
-      format: deck.list.commander ? 'brawl' : 'standard',
+      format,
+      formatLabel: FORMAT_LABEL[format],
       commander: deck.list.commander?.name,
       size: deck.size,
+      expectedSize: FORMAT_SIZE[format],
       colors: deckColors(deck),
       missing: deck.missing,
+      illegal: needsStandardLegal(format) ? names.filter(n => !deck.missing.includes(n) && !isLegal(n)) : [],
+      duplicates: format === 'standard' ? [] : [...copies].filter(([n, k]) => k > 1 && !BASIC.test(n)).map(([n]) => n),
       unmodeled: [...cov].filter(([, n]) => n.length).map(([name, notes]) => ({ name, notes })),
       distinct: cov.size,
     },

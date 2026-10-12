@@ -258,18 +258,26 @@ export class Game {
     if (d.ptStar) { const v = this.starValue(perm); power += v.p; toughness += v.t; }
     const kws = new Set<string>(d.keywords.map(k => k.split(':')[0]));
     perm.tempKw.forEach(k => kws.add(k));
-    for (const src of this.bf) {
-      for (const st of src.def.statics) {
-        if (st.mode !== 'Continuous') continue;
-        if (!this.staticApplies(src, st.params, perm)) continue;
-        if (!this.staticConditionMet(src, st.params)) continue;
-        if (st.params.AddPower) power += this.amount(st.params.AddPower, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
-        if (st.params.AddToughness) toughness += this.amount(st.params.AddToughness, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
-        if (st.params.AddKeyword) st.params.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
+    // A static whose size counts other creatures ("+1/+1 for each creature with power 4 or greater") would ask
+    // for those creatures' stats, which ask this static again. Nested lookups skip statics (printed stats,
+    // counters and temporary effects only), the same way condDepth guards "as long as" conditions.
+    if (this.statDepth > 0) return { power, toughness, keywords: [...kws] };
+    this.statDepth++;
+    try {
+      for (const src of this.bf) {
+        for (const st of src.def.statics) {
+          if (st.mode !== 'Continuous') continue;
+          if (!this.staticApplies(src, st.params, perm)) continue;
+          if (!this.staticConditionMet(src, st.params)) continue;
+          if (st.params.AddPower) power += this.amount(st.params.AddPower, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
+          if (st.params.AddToughness) toughness += this.amount(st.params.AddToughness, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
+          if (st.params.AddKeyword) st.params.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
+        }
       }
-    }
+    } finally { this.statDepth--; }
     return { power, toughness, keywords: [...kws] };
   }
+  private statDepth = 0;
 
   private starValue(perm: Perm) {
     // Approximations for */* creatures: count creatures you control (Crusader of Odric style) or cards in graveyard.

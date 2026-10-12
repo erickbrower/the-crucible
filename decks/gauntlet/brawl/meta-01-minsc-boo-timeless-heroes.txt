@@ -1,0 +1,102 @@
+# Minsc & Boo, Timeless Heroes: Untapped.gg Competitive Brawl Bo1, tier A (rank 1 of the tier list), Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Win rates for this format are Untapped Premium only, so none are recorded here.
+# Source: https://mtga.untapped.gg/constructed/competitive-brawl/decks/2784/minsc--boo-timeless-heroes/AAQB3_IkAQFb4wmmBvcEAukD4ga3NIEThhLvAvglsQGdBVW2FO0EiQSUKMcQ3gj0C7gXuwEdYIkipSLs4Q356gSe5QSMOeKAA9kDH7MBzAHlVxKR9QHi1wEToT80rgfLvQbeTJCNAbUQzQKzhwK3WpUEuDWCGQeRBBMEdB4kkgEYKu_-Ac6OAbUJkgM3Cp1PnwS6ogPUTAkEu7UCowvUsAWJrwKqBTCxLJxH2xLgLNE9xYABpT3rGYccAAHiCQABBYcFAA
+Name Minsc & Boo, Timeless Heroes
+
+Commander
+1 Minsc & Boo, Timeless Heroes
+
+Deck
+5 Forest
+3 Mountain
+1 Lightning Bolt
+1 Ba Sing Se
+1 Llanowar Elves
+1 Birds of Paradise
+1 Wooded Foothills
+1 Reflecting Pool
+1 Command Tower
+1 Utopia Sprawl
+1 Stomping Ground
+1 Rootbound Crag
+1 Pyrokinesis
+1 Chain Lightning
+1 Library of Alexandria
+1 Strip Mine
+1 Chrome Mox
+1 Windswept Heath
+1 Bloodstained Mire
+1 Flame Slash
+1 Copperline Gorge
+1 Ancient Tomb
+1 Gemstone Caverns
+1 Arid Mesa
+1 Scalding Tarn
+1 Misty Rainforest
+1 Verdant Catacombs
+1 Elvish Mystic
+1 Zurgo Bellstriker
+1 Pelt Collector
+1 Veil of Summer
+1 Prismatic Vista
+1 Cragcrown Pathway
+1 Fury
+1 Mine Collapse
+1 Unholy Heat
+1 Goblin Anarchomancer
+1 Yavimaya, Cradle of Growth
+1 Den of the Bugbear
+1 Lair of the Hydra
+1 Rockfall Vale
+1 Boseiju, Who Endures
+1 Sokenzan, Crucible of Defiance
+1 Rahilda, Wanted Cutthroat
+1 Tenacious Pup
+1 Strangle
+1 Laelia, the Blade Reforged
+1 Cankerbloom
+1 Jarsyl, Dark Age Scion
+1 Delighted Halfling
+1 The One Ring
+1 Inti, Seneschal of the Sun
+1 Commercial District
+1 Gut, True Soul Zealot
+1 Bristly Bill, Spine Sower
+1 Sundering Eruption
+1 Bridgeworks Battle
+1 Detective's Phoenix
+1 Galvanic Discharge
+1 Ghostfire Slice
+1 Fanatic of Rhonas
+1 Malevolent Rumble
+1 Springheart Nantuko
+1 Disruptor Flute
+1 Arena of Glory
+1 Shifting Woodland
+1 Shove Aside
+1 Keen-Eyed Curator
+1 Screaming Nemesis
+1 Thornspire Verge
+1 Maddening Hex
+1 Broadside Bombardiers
+1 Kellan, Planar Trailblazer
+1 Scythecat Cub
+1 Resourceful Collector
+1 Chittering Illuminator
+1 Verdant Dread
+1 Wary Zone Guard
+1 Cori-Steel Cutter
+1 Sazh's Chocobo
+1 Pyrogoyf
+1 Kari Zev, Crew of Two
+1 Frenzied Baloth
+1 Ouroboroid
+1 Stormforged Armor
+1 Badgermole Cub
+1 Multiversal Passage
+1 Hexing Squelcher
+1 Mutable Pupa
+1 Spider-Punk
+1 Impractical Joke
+1 Legolas's Quick Reflexes
+1 Wolverine, Fierce Fighter

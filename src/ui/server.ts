@@ -11,6 +11,7 @@ import { inspectDeck, cardImpacts, pickSwaps, applySwap, DeckInfo, CardImpact, U
 import { loadCollection, saveCollection } from './collection.js';
 import { wilson } from '../sim/match.js';
 import type { CardStat } from '../sim/match.js';
+import { FORMATS, FORMAT_LABEL, Format, engineRules, gauntletDir, needsStandardLegal } from '../sim/format.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 process.chdir(ROOT);                                   // card cache and deck paths are relative to the repo
@@ -66,15 +67,17 @@ setInterval(() => {
 }, 150);
 
 // ------------------------------------------------------------------ helpers
+/** Every deck under decks/, including nested gauntlet folders such as decks/gauntlet/standard-brawl. */
 function deckFiles() {
-  const out: { file: string; folder: string; name: string; format: 'standard' | 'brawl'; size: number }[] = [];
-  if (!fs.existsSync(DECKS)) return out;
-  for (const folder of fs.readdirSync(DECKS).sort()) {
-    const dir = path.join(DECKS, folder);
-    if (!fs.statSync(dir).isDirectory()) continue;
-    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.txt')).sort()) {
-      const text = fs.readFileSync(path.join(dir, f), 'utf8');
-      const name = text.match(/^\s*Name\s+(.+)$/mi)?.[1].trim() ?? f.replace(/\.txt$/, '');
+  const out: { file: string; folder: string; name: string; format: Format; size: number }[] = [];
+  const walk = (rel: string) => {
+    const dir = path.join(DECKS, rel);
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const child = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { walk(child); continue; }
+      if (!rel || !e.name.endsWith('.txt')) continue;
+      const text = fs.readFileSync(path.join(dir, e.name), 'utf8');
+      const name = text.match(/^\s*Name\s+(.+)$/mi)?.[1].trim() ?? e.name.replace(/\.txt$/, '');
       let size = 0, section = 'deck';
       for (const raw of text.split(/\r?\n/)) {
         const l = raw.trim().toLowerCase();
@@ -82,9 +85,12 @@ function deckFiles() {
         else if (['deck', 'main', 'maindeck', 'commander'].includes(l)) section = 'deck';
         else if (section === 'deck') size += +(l.match(/^(\d+)x?\s/)?.[1] ?? 0);
       }
-      out.push({ file: `${folder}/${f}`, folder, name, format: /^\s*commander\s*$/mi.test(text) ? 'brawl' : 'standard', size });
+      const commander = /^\s*commander\s*$/mi.test(text);
+      const format: Format = !commander ? 'standard' : size >= 80 ? 'brawl' : 'standard-brawl';
+      out.push({ file: child, folder: rel, name, format, size });
     }
-  }
+  };
+  if (fs.existsSync(DECKS)) walk('');
   return out;
 }
 
@@ -128,7 +134,7 @@ function startGauntlet(text: string, name: string, oppFiles: string[], s: Settin
   jobs.set(job.id, job);
   let tw = 0, tg = 0;
   Promise.all(opps.map((o, i) => pool.run(job.id, {
-    deckText: text, oppText: o.text, oppName: o.name, games: s.games, seed: s.seed, maxTurns: s.maxTurns, format: info.format,
+    deckText: text, oppText: o.text, oppName: o.name, games: s.games, seed: s.seed, maxTurns: s.maxTurns, format: engineRules(info.format),
   }, done => { job.matchups[i].done = done; touch(job.id); }).then(r => {
     const m = job.matchups[i];
     m.done = r.games;
@@ -163,7 +169,7 @@ function startGauntlet(text: string, name: string, oppFiles: string[], s: Settin
 async function gauntletWR(group: string, text: string, base: GauntletJob, games: number, onDone: (n: number) => void): Promise<number> {
   const doneBy = new Array(base._opps.length).fill(0);
   const rs = await Promise.all(base._opps.map((o, i) => pool.run(group, {
-    deckText: text, oppText: o.text, oppName: o.name, games, seed: base.settings.seed, maxTurns: base.settings.maxTurns, format: base.deck.format,
+    deckText: text, oppText: o.text, oppName: o.name, games, seed: base.settings.seed, maxTurns: base.settings.maxTurns, format: engineRules(base.deck.format),
   }, d => { doneBy[i] = d; onDone(doneBy.reduce((a, b) => a + b, 0)); })));
   const wins = rs.reduce((a, r) => a + r.wins[0], 0), n = rs.reduce((a, r) => a + r.games, 0);
   return 100 * wins / n;
@@ -240,7 +246,8 @@ const server = http.createServer(async (req, res) => {
     const route = `${req.method} ${url.pathname}`;
     if (route === 'GET /api/state') {
       const col = loadCollection();
-      return json(res, 200, { decks: deckFiles(), collection: { count: col.cards.length, updated: col.updated }, workers: pool.size });
+      const formats = FORMATS.map(f => ({ id: f, label: FORMAT_LABEL[f], gauntlet: gauntletDir(f).replace(/^decks\//, ''), standardLegal: needsStandardLegal(f) }));
+      return json(res, 200, { decks: deckFiles(), formats, collection: { count: col.cards.length, updated: col.updated }, workers: pool.size });
     }
     if (route === 'GET /api/deck') return json(res, 200, { text: fs.readFileSync(deckPath(url.searchParams.get('file') ?? ''), 'utf8') });
     if (route === 'POST /api/inspect') { const b = await readBody(req); return json(res, 200, inspectDeck(String(b.text ?? ''), String(b.name || 'My deck')).info); }

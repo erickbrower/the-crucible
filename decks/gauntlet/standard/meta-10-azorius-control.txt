@@ -1,0 +1,24 @@
+# Azorius Control: Untapped.gg Standard Bo1 meta, Sep 29 - Oct 12, 2026 (captured Oct 12).
+# Archetype: 54.1% win rate over 25,000 matches. This list: 45.6% over 210 matches.
+# Source: https://mtga.untapped.gg/constructed/standard/decks/176/azorius-control/AAQAAQAFjAWiFYfsLKPHC9ucCQSJ0iy9wgHouwqh5gcIrhK-UYfCGJjYE_vSBIDmDtAEztwDAQaIBQA
+Name Azorius Control
+
+Deck
+6 Plains
+2 Island
+4 Day of Judgment
+2 Rest in Peace
+4 Hallowed Fountain
+4 Fabled Passage
+3 Virtue of Knowledge
+4 Clay-Fired Bricks
+2 Restless Anchorage
+3 Three Steps Ahead
+4 Floodfarm Verge
+2 Mistrise Village
+3 White Auracite
+3 Seam Rip
+4 Cryogen Relic
+4 Extinguisher Battleship
+2 Kinbinding
+4 The Mind Stone

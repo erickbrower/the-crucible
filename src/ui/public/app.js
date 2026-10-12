@@ -29,24 +29,33 @@ function recall(key, fallback) { try { const v = localStorage.getItem('crucible.
 async function loadState() {
   const s = await api('/api/state');
   state.decks = s.decks;
+  state.formats = s.formats;
   $('meta').textContent = `${s.workers} worker thread${s.workers === 1 ? '' : 's'}`;
   setCollectionStatus(s.collection);
 
   const sel = $('deckSelect'), current = sel.value;
   sel.innerHTML = '<option value="">Paste a deck below…</option>';
   const byFolder = groupBy(s.decks, d => d.folder);
-  for (const folder of ['mine', ...Object.keys(byFolder).filter(f => f !== 'mine')]) {
+  const folders = ['mine', ...s.formats.map(f => f.gauntlet), ...Object.keys(byFolder).filter(f => f !== 'mine' && !s.formats.some(x => x.gauntlet === f))];
+  for (const folder of folders) {
     if (!byFolder[folder]) continue;
     const og = document.createElement('optgroup');
-    og.label = folder === 'mine' ? 'My decks' : folder;
-    for (const d of byFolder[folder]) og.append(new Option(`${d.name} (${d.format === 'brawl' ? 'Brawl' : 'Standard'}, ${d.size})`, d.file));
+    og.label = folderLabel(folder);
+    for (const d of byFolder[folder]) og.append(new Option(`${d.name} (${formatLabel(d.format)}, ${d.size})`, d.file));
     sel.append(og);
   }
   sel.value = current;
-  renderOpponents(byFolder);
+  renderOpponents();
 }
 
 function groupBy(xs, f) { const o = {}; for (const x of xs) (o[f(x)] ??= []).push(x); return o; }
+const formatLabel = (id) => state.formats?.find(f => f.id === id)?.label ?? id;
+const formatOfFolder = (folder) => state.formats?.find(f => f.gauntlet === folder);
+function folderLabel(folder) {
+  if (folder === 'mine') return 'My decks';
+  const f = formatOfFolder(folder);
+  return f ? `${f.label} gauntlet` : folder;
+}
 
 function setCollectionStatus(c) {
   $('collectionStatus').textContent = c.count
@@ -54,17 +63,30 @@ function setCollectionStatus(c) {
     : 'No collection loaded yet. Load the arena_collection.csv export from the project so suggestions only use cards you own.';
 }
 
-function renderOpponents(byFolder) {
-  const chosen = new Set(recall('opponents', state.decks.filter(d => d.folder === 'gauntlet').map(d => d.file)));
+// Opponents follow the deck's format: its own gauntlet (and your decks of that format) are listed first and
+// ticked by default; other formats sit under "Other formats". Your ticks are remembered per format.
+const defaultOpponents = (fmt) => state.decks.filter(d => d.folder === formatGauntlet(fmt)).map(d => d.file);
+const formatGauntlet = (fmt) => state.formats?.find(f => f.id === fmt)?.gauntlet;
+
+function renderOpponents() {
+  const fmt = state.format ?? 'standard';
+  const chosen = new Set(recall(`opponents.${fmt}`, defaultOpponents(fmt)));
+  const groups = [];
+  const gauntlet = formatGauntlet(fmt);
+  const same = state.decks.filter(d => d.folder === gauntlet);
+  const mineSame = state.decks.filter(d => d.folder === 'mine' && d.format === fmt);
+  if (same.length) groups.push([`${formatLabel(fmt)} gauntlet`, same, true]);
+  if (mineSame.length) groups.push([`My ${formatLabel(fmt)} decks`, mineSame, true]);
+  const others = state.decks.filter(d => !same.includes(d) && !mineSame.includes(d));
   const box = $('opponents');
-  box.innerHTML = '';
-  for (const [folder, decks] of Object.entries(byFolder)) {
-    const g = document.createElement('div');
-    g.className = 'opp-group';
-    g.innerHTML = `<label class="check"><input type="checkbox" data-group="${esc(folder)}"> ${folder === 'mine' ? 'My decks' : esc(folder[0].toUpperCase() + folder.slice(1))}</label>
-      <div class="list">${decks.map(d => `<label class="check"><input type="checkbox" value="${esc(d.file)}" ${chosen.has(d.file) ? 'checked' : ''}> ${esc(d.name)}</label>`).join('')}</div>`;
-    box.append(g);
-  }
+  const group = ([label, decks]) => `<div class="opp-group"><label class="check"><input type="checkbox" data-group> ${esc(label)}</label>
+      <div class="list">${decks.map(d => `<label class="check"><input type="checkbox" value="${esc(d.file)}" ${chosen.has(d.file) ? 'checked' : ''}> ${esc(d.name)}</label>`).join('')}</div></div>`;
+  const otherGroups = Object.entries(groupBy(others, d => d.folder === 'mine' ? `My ${formatLabel(d.format)} decks` : folderLabel(d.folder)));
+  box.innerHTML = groups.map(group).join('')
+    + (otherGroups.length ? `<details class="other-formats" ${others.some(d => chosen.has(d.file)) ? 'open' : ''}><summary>Other formats</summary>${otherGroups.map(group).join('')}</details>` : '');
+  $('oppHint').textContent = same.length
+    ? `Like against like: this ${formatLabel(fmt)} deck faces the ${formatLabel(fmt)} gauntlet by default.`
+    : `There is no ${formatLabel(fmt)} gauntlet yet; tick any decks to play against.`;
   syncGroupBoxes();
 }
 
@@ -81,9 +103,17 @@ $('opponents').addEventListener('change', (e) => {
     for (const i of e.target.closest('.opp-group').querySelectorAll('.list input')) i.checked = e.target.checked;
   }
   syncGroupBoxes();
-  remember('opponents', selectedOpponents());
+  remember(`opponents.${state.format ?? 'standard'}`, selectedOpponents());
 });
 const selectedOpponents = () => [...$('opponents').querySelectorAll('.list input:checked')].map(i => i.value);
+
+/** Switches the page to a deck format: opponents, and whether upgrades must be Standard-legal. */
+function setFormat(fmt) {
+  if (state.format === fmt) return;
+  state.format = fmt;
+  $('standardOnly').checked = state.formats?.find(f => f.id === fmt)?.standardLegal ?? true;
+  renderOpponents();
+}
 
 // ------------------------------------------------------------------ deck editor
 $('deckSelect').addEventListener('change', async () => {
@@ -110,11 +140,15 @@ async function inspect() {
   if (!text.trim()) { box.innerHTML = ''; return; }
   try {
     const d = await api('/api/inspect', { text, name: deckName() });
+    setFormat(d.format);
     const pips = d.colors.length ? `<span class="pips">${d.colors.map(c => `<span class="pip ${c}" title="${c}"></span>`).join('')}</span>` : '';
-    const expected = d.format === 'brawl' ? [60, 100] : [60];
-    const sizeNote = expected.includes(d.size) || (d.format === 'standard' && d.size > 60) ? '' : ` <span class="warn">(usually ${expected.join(' or ')})</span>`;
-    box.innerHTML = `<strong>${esc(d.name)}</strong>: ${d.format === 'brawl' ? `Brawl deck led by ${cardLink(d.commander)}` : 'Standard deck'}, ${d.size} cards${sizeNote}${pips}
+    const sizeOk = d.format === 'standard' ? d.size >= 60 : d.size === d.expectedSize;
+    const sizeNote = sizeOk ? '' : ` <span class="warn">(${d.formatLabel} decks are ${d.format === 'standard' ? 'at least ' : ''}${d.expectedSize})</span>`;
+    const lead = d.commander ? `${d.formatLabel} deck led by ${cardLink(d.commander)}` : `${d.formatLabel} deck`;
+    box.innerHTML = `<strong>${esc(d.name)}</strong>: ${lead}, ${d.size} cards${sizeNote}${pips}
       ${d.missing.length ? `<div class="warn">Not in the card data, so left out: ${d.missing.map(esc).join(', ')}</div>` : ''}
+      ${d.illegal.length ? `<div class="warn">Not legal in ${d.formatLabel}: ${d.illegal.map(n => cardLink(n)).join(', ')}</div>` : ''}
+      ${d.duplicates.length ? `<div class="warn">${d.formatLabel} is singleton, but these have more than one copy: ${d.duplicates.map(esc).join(', ')}</div>` : ''}
       ${d.unmodeled.length ? `<details><summary>${d.unmodeled.length} of ${d.distinct} cards are only partly modeled by the engine</summary><ul>${d.unmodeled.map(u => `<li>${cardLink(u.name)}: ${u.notes.map(esc).join('; ')}</li>`).join('')}</ul></details>` : ''}`;
   } catch (e) { box.innerHTML = `<span class="warn">${esc(e.message)}</span>`; }
 }
@@ -202,7 +236,7 @@ function renderGauntlet(job) {
   $('gauntletTitle').textContent = `${job.deck.name} against ${job.matchups.length} opponent${job.matchups.length === 1 ? '' : 's'}`;
   const done = job.matchups.reduce((a, m) => a + m.done, 0), total = job.matchups.reduce((a, m) => a + m.games, 0);
   $('gauntletStatus').textContent = running ? `Playing ${done.toLocaleString()} of ${total.toLocaleString()} games`
-    : job.status === 'done' ? `${total.toLocaleString()} games in ${((job.finished - job.started) / 1000).toFixed(1)}s, ${job.deck.format === 'brawl' ? 'Brawl' : 'Standard'} rules`
+    : job.status === 'done' ? `${total.toLocaleString()} games in ${((job.finished - job.started) / 1000).toFixed(1)}s, ${job.deck.formatLabel} rules`
     : job.status === 'cancelled' ? 'Stopped' : `Error: ${job.error}`;
 
   const rows = job.matchups.map(m => {
