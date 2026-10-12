@@ -18,6 +18,7 @@ export interface Subject {
   zone?: string;
   counters?: Record<string, number>;
   giftPromised?: boolean;
+  isCommander?: boolean;
 }
 
 export interface FilterCtx {
@@ -84,6 +85,7 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     case 'Other': return s.id === undefined || s.id !== ctx.sourceId;
     case 'token': return !!s.token;
     case 'PromisedGift': return !!s.giftPromised;
+    case 'IsCommander': return !!s.isCommander;
     case 'nonToken': return !s.token;
     case 'tapped': return !!s.tapped;
     case 'untapped': return !s.tapped;

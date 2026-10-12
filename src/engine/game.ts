@@ -4,6 +4,7 @@
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
 import { loadToken, parseCost, parseManaCost, compileGift } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
+import { parseParams } from '../cards/forge.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
 import * as AI from '../ai/policy.js';
 
@@ -46,6 +47,8 @@ export interface Ctx {
   preset?: Target[];               // targets locked in on cast; re-checked for legality on resolution
   sacrificedPower?: number;
   spell?: StackItem;
+  remembered?: CardInst[];         // cards an earlier step of this effect chain "remembered" (Forge RememberChanged etc.)
+  chosen?: CardInst[];             // cards a ChooseCard step picked (Forge ChosenCard)
 }
 
 interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number; convoke?: boolean }
@@ -54,6 +57,9 @@ export class Game {
   players: [Player, Player];
   bf: Perm[] = [];
   turn = 0;
+  turnSeq = 0;                     // 0-based count of turns taken (each player's turn counts once)
+  /** Statics created by Forge "Effect" abilities: "can't be blocked this turn", "+2/+2 emblem" and the like. */
+  tempEffects: { name: string; controller: number; statics: Record<string, string>[]; objects: CardInst[]; untilSeq: number }[] = [];
   active = 0;
   rng: Rng;
   nextId = 1;
@@ -114,6 +120,7 @@ export class Game {
     let t = 0;
     while (!this.over && t < this.opts.maxTurns * 2) {
       this.turn = Math.floor(t / 2) + 1;
+      this.turnSeq = t;
       this.takeTurn(t === 0);
       this.active = this.opp(this.active);
       t++;
@@ -184,6 +191,9 @@ export class Game {
 
   cleanup() {
     for (const pl of this.players) pl.pool = [];
+    // impulse draw: "until end of turn" permission to play exiled cards runs out (the cards stay in exile)
+    for (const pl of this.players) if (pl.mayPlay?.length) pl.mayPlay = pl.mayPlay.filter(m => m.untilSeq > this.turnSeq && this.inExile(m.card));
+    this.tempEffects = this.tempEffects.filter(e => e.untilSeq > this.turnSeq);
     for (const perm of this.bf) if (perm.baseDef) { perm.def = perm.baseDef; perm.baseDef = undefined; }   // crew wears off
     for (const perm of this.bf) {
       perm.damage = 0; perm.deathtouched = false; perm.tempP = 0; perm.tempT = 0; perm.tempKw = [];
@@ -241,11 +251,11 @@ export class Game {
       return {
         kind: 'card', def: perm.def, controller: perm.controller, owner: perm.owner, token: perm.token, id: perm.id,
         tapped: perm.tapped, attacking: perm.attacking, blocking: perm.blocking, power: st.power, toughness: st.toughness,
-        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters, giftPromised: perm.giftPromised,
+        keywords: st.keywords, attachedTo: perm.attachedTo, zone: 'battlefield', counters: perm.counters, giftPromised: perm.giftPromised, isCommander: perm.isCommander,
       };
     }
     return { kind: 'card', def: x.def, controller: controller ?? (x as Perm).controller ?? x.owner, owner: x.owner, token: x.token, id: x.id,
-      power: x.def.power, toughness: x.def.toughness, keywords: x.def.keywords };
+      power: x.def.power, toughness: x.def.toughness, keywords: x.def.keywords, isCommander: x.isCommander };
   }
 
   playerSubject(pid: number): Subject { return { kind: 'player', controller: pid }; }
@@ -255,7 +265,19 @@ export class Game {
     const d = perm.def;
     let power = (d.power ?? 0) + (perm.counters.P1P1 ?? 0) - (perm.counters.M1M1 ?? 0) + perm.tempP;
     let toughness = (d.toughness ?? 0) + (perm.counters.P1P1 ?? 0) - (perm.counters.M1M1 ?? 0) + perm.tempT;
-    if (d.ptStar) { const v = this.starValue(perm); power += v.p; toughness += v.t; }
+    // */* creatures: use the card's own characteristic-defining static when it has one ("power and toughness are
+    // each equal to the number of creatures you control"), otherwise a rough guess from the rules text
+    const cda = d.ptStar ? d.statics.find(s => s.mode === 'Continuous' && s.params.CharacteristicDefining && (s.params.SetPower || s.params.SetToughness)) : undefined;
+    if (cda) {
+      if (this.statDepth === 0) {
+        this.statDepth++;
+        try {
+          const ctx: Ctx = { p: perm.controller, source: perm, x: 0, kicked: false, targets: [] };
+          if (cda.params.SetPower) power += this.amount(cda.params.SetPower, ctx, d);
+          if (cda.params.SetToughness) toughness += this.amount(cda.params.SetToughness, ctx, d);
+        } finally { this.statDepth--; }
+      }
+    } else if (d.ptStar) { const v = this.starValue(perm); power += v.p; toughness += v.t; }
     const kws = new Set<string>(d.keywords.map(k => k.split(':')[0]));
     perm.tempKw.forEach(k => kws.add(k));
     // A static whose size counts other creatures ("+1/+1 for each creature with power 4 or greater") would ask
@@ -273,6 +295,13 @@ export class Game {
           if (st.params.AddToughness) toughness += this.amount(st.params.AddToughness, { p: src.controller, source: src, x: 0, kicked: false, targets: [] }, src.def);
           if (st.params.AddKeyword) st.params.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
         }
+      }
+      for (const te of this.tempEffects) for (const st of te.statics) {
+        if (st.Mode !== 'Continuous' || !this.tempHits(te, st.Affected, perm)) continue;
+        const ctx: Ctx = { p: te.controller, x: 0, kicked: false, targets: [] };
+        if (st.AddPower) power += /^-?\d+$/.test(st.AddPower) ? +st.AddPower : this.amount(st.AddPower, ctx);
+        if (st.AddToughness) toughness += /^-?\d+$/.test(st.AddToughness) ? +st.AddToughness : this.amount(st.AddToughness, ctx);
+        if (st.AddKeyword) st.AddKeyword.split(' & ').forEach(k => kws.add(k.split(':')[0]));
       }
     } finally { this.statDepth--; }
     return { power, toughness, keywords: [...kws] };
@@ -349,14 +378,37 @@ export class Game {
 
   cantAttack(perm: Perm) {
     if (this.has(perm, 'Defender')) return true;
+    if (this.tempRestricts(perm, /CantAttack/, /can't attack/i)) return true;
     return this.bf.some(src => src.def.statics.some(s => /CantAttack/.test(s.mode) && this.staticHits(src, s.params, perm)));
   }
   cantBlock(perm: Perm) {
+    if (this.tempRestricts(perm, /CantBlock(?!By)/, /can't block/i)) return true;
     return this.bf.some(src => src.def.statics.some(s => /CantBlock(?!By)/.test(s.mode) && this.staticHits(src, s.params, perm)));
   }
   unblockable(perm: Perm) {
     if (this.has(perm, 'Unblockable') || this.has(perm, "Can't be blocked")) return true;
+    if (this.tempEffects.some(te => te.statics.some(s => s.Mode === 'CantBlockBy' && !s.ValidBlocker && this.tempHits(te, s.ValidAttacker, perm)))) return true;
     return perm.def.statics.some(s => s.mode === 'CantBlockBy' && (s.params.ValidAttacker ?? '').includes('Self') && !s.params.ValidBlocker);
+  }
+  /** Does a temporary effect stop this creature (a static of that mode, or a "can't block"-style hidden keyword)? */
+  private tempRestricts(perm: Perm, mode: RegExp, hidden: RegExp) {
+    return this.tempEffects.some(te => te.statics.some(s =>
+      (mode.test(s.Mode) && this.tempHits(te, s.ValidCard ?? s.Affected, perm))
+      || (s.Mode === 'Continuous' && hidden.test(s.AddHiddenKeyword ?? '') && this.tempHits(te, s.Affected, perm))));
+  }
+  /** Does a temporary effect's "Affected" filter cover this permanent? "IsRemembered" means the effect's own objects. */
+  private tempHits(te: { controller: number; objects: CardInst[] }, filter: string | undefined, perm: Perm) {
+    if (!filter) return false;
+    if (/IsRemembered/.test(filter)) return te.objects.some(o => o.id === perm.id);
+    return matches(filter, this.printedSubject(perm), { you: te.controller });
+  }
+  /** A permanent's printed characteristics as a filter subject (no statics, so no recursion). */
+  printedSubject(target: Perm): Subject {
+    return {
+      kind: 'card', def: target.def, controller: target.controller, owner: target.owner, token: target.token, id: target.id,
+      tapped: target.tapped, attacking: target.attacking, attachedTo: target.attachedTo,
+      power: target.def.power, toughness: target.def.toughness, keywords: target.def.keywords, counters: target.counters, isCommander: target.isCommander,
+    };
   }
   /** Total firebending N on a creature, printed or granted by a static ("has firebending 2 as long as ..."). */
   firebending(perm: Perm) {
@@ -423,6 +475,14 @@ export class Game {
     if (/^Count\$CardsInYourHand/.test(expr)) return me.hand.length;
     if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
       base = this.bf.filter(x => matches(m![1], this.subjectOf(x), { you: ctx.p, sourceId: ctx.source?.id })).length; rest = m[2] ?? '';
+    } else if ((m = expr.match(/^Count\$ValidGraveyard ([^/$]+)\$CardTypes(\/.*)?$/))) {
+      // "the number of card types among cards in all graveyards" (Tarmogoyf and friends)
+      const TYPES = ['Artifact', 'Battle', 'Creature', 'Enchantment', 'Instant', 'Kindred', 'Land', 'Planeswalker', 'Sorcery'];
+      const seen = new Set<string>();
+      for (const pl of this.players) for (const c of pl.graveyard) if (matches(m[1], this.subjectOf(c, pl.id), { you: ctx.p })) c.def.types.forEach(t => TYPES.includes(t) && seen.add(t));
+      base = seen.size; rest = m[2] ?? '';
+    } else if ((m = expr.match(/^SVar\$(\w+)(\/.*)?$/)) && depth < 4) {
+      base = this.amount(m[1], ctx, def, depth + 1); rest = m[2] ?? '';
     } else if ((m = expr.match(/^Count\$ValidGraveyard ([^/]+)(\/.*)?$/))) {
       base = me.graveyard.filter(c => matches(m![1], this.subjectOf(c, ctx.p), { you: ctx.p })).length; rest = m[2] ?? '';
     } else if ((m = expr.match(/^Count\$ValidHand ([^/]+)(\/.*)?$/))) {
@@ -572,7 +632,7 @@ export class Game {
   availableMana(pid: number) { return this.manaUnits(pid).length; }
 
   spellCost(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
-    const base = opts.altCost !== undefined ? parseManaCost(opts.altCost) : c.def.cost;
+    const base = opts.altCost !== undefined ? parseManaCost(opts.altCost) : this.freeToCast(pid, c) ? parseManaCost('0') : c.def.cost;
     let generic = base.generic + (opts.x ?? 0) * Math.max(1, c.def.cost.x);
     const pips = [...base.pips];
     if (opts.kicked && c.def.kicker) { generic += c.def.kicker.generic; pips.push(...c.def.kicker.pips); }
@@ -599,7 +659,64 @@ export class Game {
   canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
     const { generic, pips } = this.spellCost(pid, c, opts);
     if (this.isSpree(c.def)) return AI.chooseSpreeModes(this, pid, c, generic, pips).length > 0;
-    return this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'));
+    if (this.payMana(pid, generic, pips, false, c.def.keywords.includes('Convoke'))) return true;
+    return opts.altCost === undefined && !opts.kicked && !opts.x && !!this.pitchCost(pid, c);
+  }
+
+  /**
+   * Pitch spells: an alternative cost made of life, exiling cards from hand, returning lands or sacrificing
+   * (Force of Will, Daze, Snuff Out, the Flares). Returns the cost when its condition holds and it can be paid now.
+   */
+  pitchCost(pid: number, c: CardInst): { mana: string; payLife: number; parts: { kind: string; n: number; filter: string }[] } | undefined {
+    const p = this.players[pid];
+    for (const s of c.def.statics) {
+      if (s.mode !== 'AlternativeCost' || !/^Spell/.test(s.params.ValidSA ?? '') || (s.params.ValidCard ?? 'Card.Self') !== 'Card.Self') continue;
+      if (!s.params.Cost || s.params.Cost === '0' || !this.staticConditionMet(c, s.params, pid)) continue;
+      const mana: string[] = [], parts: { kind: string; n: number; filter: string }[] = [];
+      let payLife = 0, ok = true;
+      // tokens: mana symbols, or Name<...> parts whose description may contain spaces ("Sac<1/Creature.Blue/a blue creature>")
+      for (const tok of s.params.Cost.match(/\w+<[^>]*>|\S+/g) ?? []) {
+        const m = tok.match(/^(\w+)<(\d+)(?:\/([^/>]+))?[^>]*>$/);
+        if (!m) { mana.push(tok); continue; }
+        if (m[1] === 'PayLife') payLife += +m[2];
+        else if (['ExileFromHand', 'Return', 'Sac'].includes(m[1])) parts.push({ kind: m[1], n: +m[2], filter: m[3] ?? 'Card' });
+        else ok = false;
+      }
+      if (!ok || p.life <= payLife + 3) continue;
+      const fctx = { you: pid, sourceId: c.id };
+      const payable = parts.every(pt => this.pitchFodder(pid, c, pt, fctx).length >= pt.n);
+      const mc = parseManaCost(mana.join(' ') || '0');
+      if (payable && this.payMana(pid, mc.generic, mc.pips, false)) return { mana: mana.join(' ') || '0', payLife, parts };
+    }
+    return undefined;
+  }
+
+  /** Candidates for one part of a pitch cost, least valuable first. */
+  private pitchFodder(pid: number, c: CardInst, pt: { kind: string; filter: string }, fctx: FilterCtx): (CardInst | Perm)[] {
+    const p = this.players[pid];
+    if (pt.kind === 'ExileFromHand') return p.hand.filter(x => x !== c && matches(pt.filter, this.subjectOf(x, pid), fctx))
+      .sort((a, b) => AI.cardValue(this, p, a) - AI.cardValue(this, p, b));
+    const perms = this.bf.filter(x => x.controller === pid && matches(pt.filter, this.subjectOf(x), fctx));
+    if (pt.kind === 'Return') return perms.sort((a, b) => Number(b.tapped) - Number(a.tapped));   // a tapped land costs nothing more
+    return perms.length ? [AI.worstPermanent(this, perms)] : [];
+  }
+
+  private payPitch(pid: number, c: CardInst, cost: NonNullable<ReturnType<Game['pitchCost']>>) {
+    const p = this.players[pid];
+    const fctx = { you: pid, sourceId: c.id };
+    const mc = parseManaCost(cost.mana);
+    this.payMana(pid, mc.generic, mc.pips, true);
+    if (cost.payLife) this.loseLife(pid, cost.payLife);
+    const paid: string[] = [];
+    for (const pt of cost.parts) for (let i = 0; i < pt.n; i++) {
+      const x = this.pitchFodder(pid, c, pt, fctx)[0];
+      if (!x) break;
+      paid.push(x.def.name);
+      if (pt.kind === 'ExileFromHand') { p.hand.splice(p.hand.indexOf(x), 1); p.exile.push(x); }
+      else if (pt.kind === 'Return') this.leave(x as Perm, 'hand');
+      else this.leave(x as Perm, 'graveyard', { sacrificed: true });
+    }
+    this.trace(`pays the alternative cost of ${c.def.name}${cost.payLife ? ` (${cost.payLife} life)` : ''}${paid.length ? `: ${paid.join(', ')}` : ''}`, pid);
   }
 
   /** Station: tap another creature to put charge counters equal to its power on this permanent. */
@@ -622,6 +739,104 @@ export class Game {
     const pt = st.params.SetPower ? { power: +st.params.SetPower, toughness: +(st.params.SetToughness ?? st.params.SetPower) } : {};
     perm.def = { ...perm.def, types: [...perm.def.types, 'Creature'], ...pt };
     this.trace(`${perm.def.name} becomes an artifact creature`, perm.controller);
+  }
+
+  // ------------------------------------------------------------------ temporary effects (Forge "Effect")
+  /**
+   * A Forge "Effect" is a temporary object carrying statics, triggers or replacements. Supported here:
+   * "you may play that card" (MayPlay) for cards an earlier step exiled and remembered, i.e. impulse draw.
+   */
+  createEffect(eff: Effect, ctx: Ctx, def?: CardDef) {
+    const P = eff.params;
+    const svars = eff.svars ?? def?.svars ?? {};
+    const untilSeq = this.durationEnd(P.Duration, ctx.p);
+    const objects = this.effectObjects(P.RememberObjects, ctx);
+    const kept: Record<string, string>[] = [];
+    for (const name of (P.StaticAbilities ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
+      const st = parseParams(svars[name] ?? '');
+      if (!(st.Mode === 'Continuous' && st.MayPlay)) { kept.push(st); continue; }
+      {
+        const pl = this.players[ctx.p];
+        for (const c of objects) {
+          if (!this.inExile(c)) continue;
+          pl.mayPlay = [...(pl.mayPlay ?? []).filter(m => m.card !== c), { card: c, untilSeq, free: !!st.MayPlayWithoutManaCost }];
+          this.trace(`may play ${c.def.name} from exile ${untilSeq === Infinity ? 'for the rest of the game' : untilSeq === this.turnSeq ? 'this turn' : 'until the end of their next turn'}`, ctx.p);
+        }
+      }
+    }
+    if (kept.length) {
+      this.tempEffects.push({ name: P.Name ?? def?.name ?? 'effect', controller: ctx.p, statics: kept, objects, untilSeq });
+      this.trace(`${P.Name ?? def?.name ?? 'effect'}: ${kept.map(s => s.Description ?? s.Mode).join('; ')}${untilSeq === Infinity ? '' : untilSeq === this.turnSeq ? ' (this turn)' : ' (until their next turn)'}`, ctx.p);
+    }
+  }
+
+  /** Turn number (turnSeq) at whose cleanup a Forge Duration runs out. No Duration means "until end of turn". */
+  durationEnd(d: string | undefined, pid: number): number {
+    if (!d) return this.turnSeq;
+    if (/Permanent|UntilHostLeavesPlay|UntilLoseControl|UntilUntaps/.test(d)) return Infinity;
+    if (/Next/.test(d)) return this.turnSeq + (this.active === pid ? 2 : 1);
+    return this.turnSeq;
+  }
+
+  /** The cards a "RememberObjects$" / "Defined$" spec of an Effect points at. */
+  effectObjects(spec: string | undefined, ctx: Ctx): CardInst[] {
+    if (!spec) return [];
+    if (/Remembered/.test(spec)) return [...(ctx.remembered ?? [])];
+    if (/ChosenCard/.test(spec)) return [...(ctx.chosen ?? [])];
+    if (spec === 'Self') return ctx.source ? [ctx.source] : [];
+    if (/Targeted/.test(spec)) return ctx.targets.flatMap(t => t.kind === 'card' ? [t.card] : t.kind === 'perm' ? [t.perm] : []);
+    return [];
+  }
+
+  inExile(c: CardInst) { return this.players.some(pl => pl.exile.includes(c)); }
+
+  /**
+   * Animate: the permanent becomes something else (a manland becomes a 2/3 flying Bird, Beorn becomes a Bear...).
+   * Until end of turn by default: the printed card comes back at cleanup, the same way crewing wears off.
+   */
+  animate(perm: Perm, P: Record<string, string>, permanent: boolean, ctx: Ctx) {
+    const CARD_TYPES = ['Artifact', 'Creature', 'Enchantment', 'Land', 'Planeswalker', 'Battle'];
+    const COLOR_NAMES: Record<string, Color> = { White: 'W', Blue: 'U', Black: 'B', Red: 'R', Green: 'G' };
+    const num = (v: string) => /^-?\d+$/.test(v) ? +v : this.amount(v, ctx, perm.def);
+    let d: CardDef = { ...perm.def };
+    if (P.RemoveAllAbilities) d = { ...d, abilities: [], triggers: [], statics: [], keywords: [], spell: undefined };
+    const add = (P.Types ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (add.length) {
+      d.types = [...new Set([...(P.RemoveCardTypes ? [] : d.types), ...add.filter(t => CARD_TYPES.includes(t))])];
+      d.subtypes = [...new Set([...(P.RemoveCreatureTypes ? [] : d.subtypes), ...add.filter(t => !CARD_TYPES.includes(t) && t !== 'AllCreatureTypes')])];
+    }
+    if (P.Power !== undefined) d.power = num(P.Power);
+    if (P.Toughness !== undefined) d.toughness = num(P.Toughness);
+    if (P.Keywords) d.keywords = [...d.keywords, ...P.Keywords.split(' & ').map(k => k.trim())];
+    if (P.Colors) {
+      const cols = P.Colors.split(',').map(c => COLOR_NAMES[c.trim()]).filter(Boolean);
+      d.colors = P.OverwriteColors ? cols : [...new Set([...d.colors, ...cols])];
+    }
+    if (!permanent) perm.baseDef ??= perm.def;
+    perm.def = d;
+    const st = d.types.includes('Creature') ? ` ${d.power ?? 0}/${d.toughness ?? 0}` : '';
+    this.trace(`${perm.def.name} becomes${st} ${[...d.subtypes.filter(s => !perm.baseDef?.subtypes.includes(s)), ...d.types].join(' ')}${permanent ? '' : ' until end of turn'}`, perm.controller);
+  }
+
+  /** Removes a card from whichever player's exile holds it (you can play an opponent's exiled card). */
+  takeFromExile(c: CardInst) {
+    for (const pl of this.players) { const i = pl.exile.indexOf(c); if (i >= 0) { pl.exile.splice(i, 1); return; } }
+  }
+
+  /** May this player play this exiled card right now (impulse draw or warp)? */
+  playableFromExile(pid: number, c: CardInst): { free?: boolean } | undefined {
+    if (!this.inExile(c)) return undefined;
+    const p = this.players[pid];
+    const m = p.mayPlay?.find(x => x.card === c);
+    if (m) return { free: m.free };
+    if ((p.warpExile ?? []).some(w => w.card === c && w.turn < this.turn)) return {};
+    return undefined;
+  }
+
+  /** "If you control a commander, you may cast this spell without paying its mana cost" (AlternativeCost$ 0). */
+  freeToCast(pid: number, c: CardInst): boolean {
+    return c.def.statics.some(s => s.mode === 'AlternativeCost' && s.params.Cost === '0' && /^Spell/.test(s.params.ValidSA ?? '')
+      && (s.params.ValidCard ?? 'Card.Self') === 'Card.Self' && this.staticConditionMet(c, s.params, pid));
   }
 
   /** Warp: at the beginning of the end step, exile warped permanents; they can be cast from exile on a later turn. */
@@ -667,8 +882,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ lands
-  playLand(p: Player, c: CardInst, wantUntapped: boolean) {
-    p.hand.splice(p.hand.indexOf(c), 1);
+  /** Plays a land from hand (or from exile via impulse draw). `asDef` plays a modal double-faced card's other face. */
+  playLand(p: Player, c: CardInst, wantUntapped: boolean, asDef?: CardDef) {
+    if (p.hand.includes(c)) p.hand.splice(p.hand.indexOf(c), 1);
+    else { this.takeFromExile(c); p.mayPlay = (p.mayPlay ?? []).filter(m => m.card !== c); }   // impulse-drawn land
+    if (asDef) { c = { ...c, def: asDef }; this.trace(`plays ${asDef.name} (back face)`, p.id); }
     p.landsPlayed++; this.cardsCast[p.id].add(c.def.name);
     const land = c.def.land!;
     let tapped = false;
@@ -700,7 +918,11 @@ export class Game {
     const p = this.players[pid];
     if (opts.flashback) { opts = { ...opts, altCost: this.keywordCost(c, 'Flashback') }; if (opts.altCost === undefined || !p.graveyard.includes(c)) return false; }
     if (opts.warp) { opts = { ...opts, altCost: this.keywordCost(c, 'Warp') }; if (opts.altCost === undefined || !p.hand.includes(c)) return false; }
-    if (opts.fromExile && !(p.warpExile ?? []).some(w => w.card === c && w.turn < this.turn)) return false;
+    if (opts.fromExile) {
+      const ok = this.playableFromExile(pid, c);
+      if (!ok) return false;
+      if (ok.free && opts.altCost === undefined) opts = { ...opts, altCost: '0' };
+    }
     let { generic, pips } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
     // Spree: each chosen mode adds its own cost
@@ -710,11 +932,15 @@ export class Game {
       if (!modes.length) return false;
       for (const m of modes) { const mc = parseManaCost(m.params.ModeCost); generic += mc.generic; pips = [...pips, ...mc.pips]; }
     }
-    if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) return false;
+    if (!this.payMana(pid, generic, pips, true, c.def.keywords.includes('Convoke'))) {
+      const pitch = opts.altCost === undefined && !opts.kicked && !opts.x ? this.pitchCost(pid, c) : undefined;
+      if (!pitch) return false;
+      this.payPitch(pid, c, pitch);
+    }
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
     else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
-    else if (opts.fromExile) { p.exile.splice(p.exile.indexOf(c), 1); p.warpExile = p.warpExile!.filter(w => w.card !== c); }
+    else if (opts.fromExile) { this.takeFromExile(c); p.warpExile = (p.warpExile ?? []).filter(w => w.card !== c); p.mayPlay = (p.mayPlay ?? []).filter(m => m.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++; this.cardsCast[pid].add(c.def.name);
     const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, modes,
@@ -1269,6 +1495,8 @@ export class Game {
   // ------------------------------------------------------------------ effects
   resolveEffect(eff: Effect, ctx: Ctx, depth = 0): void {
     if (this.over || depth > 10) return;
+    ctx.remembered ??= [];                           // shared by every step of this chain (sub contexts copy the reference)
+    ctx.chosen ??= [];
     const P = eff.params;
     const def = ctx.source?.def ?? ctx.card?.def;
     // conditions we can evaluate cheaply
@@ -1442,7 +1670,14 @@ export class Game {
       case 'Mill': {
         const n = this.amount(P.NumCards ?? '1', sub, def);
         const who = needsTargets ? targets : (P.Defined ? defined() : [{ kind: 'player', pid: ctx.p } as Target]);
-        for (const t of who) if (t.kind === 'player') { const pl = this.players[t.pid]; for (let i = 0; i < n && pl.library.length; i++) pl.graveyard.push(pl.library.pop()!); }
+        for (const t of who) if (t.kind === 'player') {
+          const pl = this.players[t.pid];
+          for (let i = 0; i < n && pl.library.length; i++) {
+            const c = pl.library.pop()!;
+            (P.Destination === 'Exile' ? pl.exile : pl.graveyard).push(c);
+            if (P.RememberMilled) ctx.remembered!.push(c);
+          }
+        }
         break;
       }
       case 'Sacrifice': {
@@ -1496,9 +1731,12 @@ export class Game {
         for (const c of top) {
           if (chosen.includes(c)) {
             if (P.DestinationZone === 'Battlefield') this.enter(c, ctx.p, {});
-            else if (P.DestinationZone === 'Exile') pl.hand.push(c);    // "may play" exile effects ~ drawing
+            else if (P.DestinationZone === 'Exile') pl.exile.push(c);   // a following Effect may let us play it
+            else if (P.DestinationZone === 'Graveyard') pl.graveyard.push(c);
             else pl.hand.push(c);
+            if (P.RememberChanged) ctx.remembered!.push(c);
           } else if (P.DestinationZone2 === 'Graveyard') pl.graveyard.push(c);
+          else if (P.DestinationZone2 === 'Exile') pl.exile.push(c);
           else pl.library.unshift(c);
         }
         break;
@@ -1553,6 +1791,28 @@ export class Game {
         }
         this.addCounters(land, 'P1P1', n);
         this.trace(`earthbends ${land.def.name} (+${n})`, ctx.p);
+        break;
+      }
+      case 'Cleanup': {
+        if (P.ClearRemembered) ctx.remembered!.length = 0;
+        if (P.ClearChosenCard) ctx.chosen!.length = 0;
+        break;
+      }
+      case 'Effect': this.createEffect(eff, sub, def); break;
+      case 'Animate': {
+        const perms = (needsTargets ? targets : defined()).flatMap(t => t.kind === 'perm' ? [t.perm] : []);
+        for (const perm of perms) if (this.bf.includes(perm)) this.animate(perm, P, /Permanent|Perpetual/.test(P.Duration ?? ''), sub);
+        break;
+      }
+      case 'ChooseCard': {
+        // Supported when choosing among cards an earlier step remembered ("exile two, choose one of them")
+        if (!/IsRemembered/.test(P.Choices ?? '')) break;
+        const pool = ctx.remembered!.filter(c => this.inExile(c) || this.players.some(pl => pl.hand.includes(c) || pl.graveyard.includes(c)));
+        const n = this.amount(P.Amount ?? '1', sub, def);
+        const pl = this.players[ctx.p];
+        const best = [...pool].sort((a, b) => AI.cardValue(this, pl, b) - AI.cardValue(this, pl, a)).slice(0, n);
+        ctx.chosen!.splice(0, ctx.chosen!.length, ...best);
+        if (best.length) this.trace(`chooses ${best.map(c => c.def.name).join(', ')}`, ctx.p);
         break;
       }
       default: break; // unsupported / ignored effects are reported by the coverage tool
@@ -1691,6 +1951,7 @@ export class Game {
     this.phase = 'combat';
     const ap = this.active, dp = this.opp(ap);
     AI.crewVehicles(this, this.players[ap]);
+    AI.animateForAttack(this, this.players[ap]);
     const attackers = AI.chooseAttackers(this, this.players[ap]);
     if (!attackers.length) return;
     this.players[ap].attackedThisTurn = true;
