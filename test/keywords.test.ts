@@ -1,6 +1,7 @@
 // Evergreen keywords the engine claims to support, one rule per test.
 import { it, expect } from 'vitest';
 import * as AI from '../src/ai/policy.js';
+import { loadCard } from '../src/cards/compile.js';
 import { d, setup, card, perm, onBf, fight, log } from './helpers.js';
 
 d('evasion and blocking', () => {
@@ -153,5 +154,29 @@ d('additional costs and permanents that modify creatures', () => {
   it('affinity for artifacts reduces the cost', () => {
     const g = setup({ hand: ['Frogmite'], bf: ['Ornithopter', 'Ornithopter', 'Ornithopter', 'Ornithopter'] });
     expect(g.spellCost(0, card(g, 0, 'Frogmite')).generic).toBe(0);
+  });
+});
+
+d('dwarves (The Hobbit)', () => {
+  it('Storied: Óin gets +1/+0 and haste once you have an enduring story, and keeps it', () => {
+    const g = setup({ bf: ['Óin the Brave'] });
+    const oin = perm(g, 0, 'Óin the Brave');
+    expect(g.statsOf(oin).power).toBe(1);
+    const extra = ['Dori, Bearer of Friends', 'Grizzly Bears'];
+    g.enter({ id: g.nextId++, def: loadCard(extra[0]), owner: 0 }, 0);   // Dori + its Treasure: 3 artifacts/legendaries
+    expect(g.statsOf(oin).power).toBe(2);
+    expect(g.has(oin, 'Haste')).toBe(true);
+    for (const x of g.bf.filter(x => x !== oin && x.controller === 0)) g.leave(x, 'graveyard');
+    expect(g.statsOf(oin).power).toBe(2);                  // the story endures
+  });
+
+  it('Thorin attaches your equipment to a creature when he enters', () => {
+    const g = setup({ hand: ['Thorin, Mountain-king'], bf: ['Buster Sword', 'Grizzly Bears', 'Mountain', 'Mountain', 'Mountain', 'Mountain'] });
+    g.castSpell(0, card(g, 0, 'Thorin, Mountain-king'));
+    const sword = perm(g, 0, 'Buster Sword');
+    expect(sword.attachedTo).toBeDefined();
+    const host = g.bf.find(x => x.id === sword.attachedTo)!;
+    expect(g.statsOf(host).power).toBe((host.def.power ?? 0) + 3);
+    expect(onBf(g, 0, 'Thorin, Mountain-king')).toBe(true);
   });
 });

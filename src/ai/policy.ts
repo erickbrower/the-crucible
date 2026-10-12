@@ -322,6 +322,10 @@ export function chooseTargets(g: Game, eff: Effect, ctx: Ctx): Target[] {
   const def = ctx.source?.def ?? ctx.card?.def;
   const max = P.TargetMax ? Math.max(1, g.amount(P.TargetMax, ctx, def)) : 1;
   const min = P.TargetMin !== undefined ? g.amount(P.TargetMin, ctx, def) : 1;
+  // a bare targeting step ("target Equipment you control", then attach them): take every legal target
+  if (eff.api === 'Pump' && !P.NumAtt && !P.NumDef && !P.KW && eff.sub?.params.Object === 'ParentTarget') {
+    return g.bf.filter(x => matches(P.ValidTgts ?? 'Card', g.subjectOf(x), fctxOf(ctx))).slice(0, max).map(perm => ({ kind: 'perm', perm }) as Target);
+  }
   const sc = scoreTargets(g, eff, ctx);
   const picks = sc.filter(x => x.s > 0.05).slice(0, max);
   // mandatory targets: take the least-bad remaining options

@@ -286,6 +286,7 @@ export class Game {
   /** "As long as ..." conditions on a static: CheckSVar/SVarCompare and IsPresent/PresentCompare. */
   staticConditionMet(src: Perm | CardInst, params: Record<string, string>, controller = (src as Perm).controller ?? src.owner): boolean {
     if (params.Condition === 'MaxSpeed' && (this.players[controller].speed ?? 0) < 4) return false;
+    if (params.Condition === 'EnduringStory' && !this.enduringStory(controller)) return false;
     if (!params.CheckSVar && !params.IsPresent) return true;
     if (this.condDepth > 0) return true;            // avoid recursion through statsOf
     this.condDepth++;
@@ -972,6 +973,15 @@ export class Game {
     this.emit({ type: 'lifeGained', player: pid, amount: amt });
   }
 
+  /** Storied: you have an enduring story (for the rest of the game) once you control three or more artifacts, legendaries and/or Sagas. */
+  enduringStory(pid: number): boolean {
+    const p = this.players[pid];
+    if (p.enduringStory) return true;
+    const n = this.bf.filter(x => x.controller === pid && (x.def.types.includes('Artifact') || x.def.supertypes.includes('Legendary') || x.def.subtypes.includes('Saga'))).length;
+    if (n >= 3 && this.bf.some(x => x.controller === pid && x.def.keywords.includes('Storied'))) p.enduringStory = true;
+    return n >= 3;
+  }
+
   /** Speed goes up once on each of your turns when an opponent loses life. */
   private speedUp(loser: number) {
     const me = this.players[this.opp(loser)];
@@ -1463,7 +1473,12 @@ export class Game {
       case 'UntapAll': for (const x of this.bf.filter(x => matches(P.ValidCards ?? 'Land.YouCtrl', this.subjectOf(x), { you: ctx.p }))) x.tapped = false; break;
       case 'Attach': {
         const host = (needsTargets ? targets : defined()).find(t => t.kind === 'perm');
-        if (host?.kind === 'perm' && ctx.source && this.bf.includes(ctx.source)) ctx.source.attachedTo = host.perm.id;
+        if (host?.kind !== 'perm') break;
+        if (P.Object === 'ParentTarget') {
+          // "attach any number of target Equipment you control to target creature you control" (Thorin)
+          for (const t of ctx.targets) if (t.kind === 'perm' && this.bf.includes(t.perm) && t.perm.def.subtypes.includes('Equipment')) t.perm.attachedTo = host.perm.id;
+          this.trace(`attaches ${ctx.targets.map(t => t.kind === 'perm' ? t.perm.def.name : '').join(', ')} to ${host.perm.def.name}`, ctx.p);
+        } else if (ctx.source && this.bf.includes(ctx.source)) ctx.source.attachedTo = host.perm.id;
         break;
       }
       case 'Charm': {

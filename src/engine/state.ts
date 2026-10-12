@@ -62,6 +62,7 @@ export interface Player {
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;
+  enduringStory?: boolean;  // Storied: once you've controlled 3+ artifacts/legendaries/Sagas, permanently
   speed?: number;           // Start your engines! (0/undefined = no speed; max 4)
   speedTurn?: number;       // turn the speed last increased
   warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn
