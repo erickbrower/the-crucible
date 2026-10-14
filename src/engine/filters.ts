@@ -26,6 +26,8 @@ export interface FilterCtx {
   sourceId?: number;
   sourceAttachedTo?: number;
   chosenType?: string;
+  namedCard?: string;      // "the chosen name" (Disruptor Flute)
+  remembered?: number[];   // ids of cards the current effect remembered ("IsRemembered")
 }
 
 const TYPE_WORDS = new Set(['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker', 'Instant', 'Sorcery', 'Battle', 'Kindred']);
@@ -80,12 +82,14 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     case 'YouCtrl': return s.controller === ctx.you;
     case 'OppCtrl': return s.controller !== ctx.you;
     case 'YouOwn': return (s.owner ?? s.controller) === ctx.you;
-    case 'OppOwn': return (s.owner ?? s.controller) !== ctx.you;
+    case 'OppOwn': case 'YouDontOwn': return (s.owner ?? s.controller) !== ctx.you;
     case 'Self': return s.id !== undefined && s.id === ctx.sourceId;
-    case 'Other': return s.id === undefined || s.id !== ctx.sourceId;
+    case 'Other': case 'StrictlyOther': return s.id === undefined || s.id !== ctx.sourceId;
+    case 'IsRemembered': return s.id !== undefined && !!ctx.remembered?.includes(s.id);
     case 'token': return !!s.token;
     case 'PromisedGift': return !!s.giftPromised;
     case 'IsCommander': return !!s.isCommander;
+    case 'NamedCard': return !!ctx.namedCard && s.def?.name === ctx.namedCard;
     case 'nonToken': return !s.token;
     case 'tapped': return !!s.tapped;
     case 'untapped': return !s.tapped;
