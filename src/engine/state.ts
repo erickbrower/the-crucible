@@ -33,7 +33,9 @@ export interface Perm extends CardInst {
   earthbent?: boolean;
   baseDef?: CardDef;
   warped?: boolean;
-  giftPromised?: boolean;   // cast with its gift promised         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  giftPromised?: boolean;   // cast with its gift promised
+  attacksThisTurn?: number; // times it attacked this turn ("attacks for the first time each turn")
+  impending?: boolean;      // cast for its impending cost: not a creature until its last time counter is removed         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
 }
 
 export interface DeckList {
