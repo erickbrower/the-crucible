@@ -303,6 +303,10 @@ export function scoreTargets(g: Game, eff: Effect, ctx: Ctx): Scored[] {
           if (perm.def.keywords.includes('Defender')) s -= 3;
         }
         if (eff.api === 'Untap' && !perm.tapped) s = 0.1;
+        // "put a trample counter on it; it becomes a Bear": better on a creature that doesn't have those already
+        if (eff.api === 'PutCounter' && P.CounterType && g.has(perm, P.CounterType)) s *= 0.5;
+        const anim = eff.sub?.api === 'Animate' && /Targeted/.test(eff.sub.params.Defined ?? '') ? eff.sub.params.Types : undefined;
+        if (anim && anim.split(',').every(t => perm.def.subtypes.includes(t.trim()) || perm.def.types.includes(t.trim()))) s *= 0.4;
         if (hint.perm === perm) s += 50;
       }
     }
