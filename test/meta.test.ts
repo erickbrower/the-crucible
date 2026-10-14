@@ -178,3 +178,10 @@ d('reanimator and graveyard mechanics', () => {
     expect(log(g2)).toMatch(/casts Dark Ritual[\s\S]*casts Sheoldred/);
   });
 });
+
+d('self cost reduction', () => {
+  it('Ghalta, Primal Hunger costs {X} less where X is the total power of your creatures', () => {
+    const g = setup({ hand: ['Ghalta, Primal Hunger'], bf: ['Serra Angel', 'Raging Goblin'] });
+    expect(g.spellCost(0, g.players[0].hand[0]).generic).toBe(10 - 5);
+  });
+});

@@ -533,7 +533,13 @@ export class Game {
     if (/^Count\$YourSpeed/.test(expr)) return me.speed ?? 0;
     if (/^Count\$(LifeYouGainedThisTurn|YourLifeGainedThisTurn)/.test(expr)) return me.lifeGainedThisTurn;
     if (/^Count\$CardsInYourHand/.test(expr)) return me.hand.length;
-    if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
+    if ((m = expr.match(/^Count\$Valid ([^/$]+)\$(CardPower|CardToughness|CardManaCost)(\/.*)?$/))) {
+      // "the total power of creatures you control"
+      const key = m[2];
+      base = this.bf.filter(x => matches(m![1], this.subjectOf(x), { you: ctx.p, sourceId: ctx.source?.id }))
+        .reduce((a, x) => a + (key === 'CardPower' ? this.statsOf(x).power : key === 'CardToughness' ? this.statsOf(x).toughness : x.def.mv), 0);
+      rest = m[3] ?? '';
+    } else if ((m = expr.match(/^Count\$(?:Valid|TypeYouCtrl) ([^/]+)(\/.*)?$/))) {
       base = this.bf.filter(x => matches(m![1], this.subjectOf(x), { you: ctx.p, sourceId: ctx.source?.id })).length; rest = m[2] ?? '';
     } else if ((m = expr.match(/^Count\$ValidGraveyard ([^/$]+)\$CardTypes(\/.*)?$/))) {
       // "the number of card types among cards in all graveyards" (Tarmogoyf and friends)
@@ -778,6 +784,12 @@ export class Game {
     if (c.def.affinity) {
       const n = this.bf.filter(x => x.controller === pid && matches(c.def.affinity, this.subjectOf(x), { you: pid })).length;
       generic = Math.max(0, generic - n);
+    }
+    // a card's own reduction ("This spell costs {X} less to cast, where X is the total power of creatures you control")
+    for (const st of c.def.statics) {
+      if (st.mode !== 'ReduceCost' || st.params.EffectZone !== 'All' || !/Card\.Self/.test(st.params.ValidCard ?? '') || st.params.ValidTarget) continue;
+      if (!this.staticConditionMet(c, st.params, pid)) continue;
+      generic = Math.max(0, generic - this.amount(st.params.Amount ?? '1', { p: pid, card: c, x: 0, kicked: false, targets: [] }, c.def));
     }
     // cost reducers ("Red spells you cast cost {1} less", "costs {3} less if it targets a tapped creature" is ignored)
     for (const src of this.bf) {
