@@ -13,6 +13,7 @@ export const SUPPORTED_APIS = new Set([
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
+  'AddPhase',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
@@ -105,6 +106,7 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
   else if (api === 'Animate' && (params.Triggers || params.Abilities || params.staticAbilities || params.HiddenKeywords)) notes.push('animate: granted abilities ignored');
+  else if (api === 'AddPhase' && !/Combat/.test(params.ExtraPhase ?? '')) notes.push(`extra phase "${params.ExtraPhase}" ignored`);
   void SILENT_APIS;
   if (api === 'Charm' && params.Choices && depth < 6) {
     eff.choices = params.Choices.split(',').map(n => face.svars[n.trim()]).filter(Boolean)

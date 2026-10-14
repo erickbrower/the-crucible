@@ -2,7 +2,7 @@
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
-import { loadToken, parseCost, parseManaCost, compileGift } from '../cards/compile.js';
+import { loadToken, parseCost, parseManaCost, compileGift, compileEffect } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { parseParams } from '../cards/forge.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
@@ -172,21 +172,8 @@ export class Game {
     this.emit({ type: 'phase', phase: 'Main1', player: this.active });
     AI.mainPhase(this, a, 1);
     if (this.over) return;
-    // combat, then any additional combat phases (Aurelia, Bumi...); a setup effect runs as that combat begins
-    this.extraCombats = [];
-    let setup: { eff?: Effect; ctx?: Ctx } | undefined;
-    for (let n = 0; n < 6; n++) {
-      this.phase = 'combat';
-      if (n) this.trace('additional combat phase');
-      this.emit({ type: 'phase', phase: 'BeginCombat', player: this.active });
-      if (this.over) return;
-      if (setup?.eff && setup.ctx) this.resolveEffect(setup.eff, setup.ctx);
-      this.combat();
-      if (this.over) return;
-      setup = this.extraCombats.shift();
-      if (!setup) break;
-    }
-    this.extraCombats = [];
+    this.combatPhases();
+    if (this.over) return;
     this.phase = 'main2';
     AI.mainPhase(this, a, 2);
     if (this.over) return;
@@ -202,6 +189,23 @@ export class Game {
       this.trace(`  == life ${this.players[0].life}-${this.players[1].life} | hands ${this.players[0].hand.length}/${this.players[1].hand.length} | P0: ${board(0) || '-'} | P1: ${board(1) || '-'}`);
       if (process.env.SHOW_HANDS) for (const pl of this.players) this.trace(`     P${pl.id} hand: ${pl.hand.map(c => c.def.name).join(', ')}`);
     }
+  }
+
+  /** Beginning of combat and combat, then any additional combat phases (Aurelia, Bumi...). */
+  combatPhases() {
+    this.extraCombats = [];
+    let setup: { eff?: Effect; ctx?: Ctx } | undefined;
+    for (let n = 0; n < 6 && !this.over; n++) {
+      this.phase = 'combat';
+      if (n) this.trace('additional combat phase');
+      this.emit({ type: 'phase', phase: 'BeginCombat', player: this.active });
+      if (this.over) break;
+      if (setup?.eff && setup.ctx) this.resolveEffect(setup.eff, setup.ctx);   // e.g. "only land creatures can attack"
+      this.combat();
+      setup = this.extraCombats.shift();
+      if (!setup) break;
+    }
+    this.extraCombats = [];
   }
 
   cleanup() {
@@ -1349,6 +1353,7 @@ export class Game {
     const P = trig.params;
     if (P.PlayerTurn === 'True' && this.active !== controller) return false;
     if (P.PlayerTurn === 'False' && this.active === controller) return false;
+    if (P.FirstAttack === 'True' && ev.type === 'attacks' && (ev.perm.attacksThisTurn ?? 1) > 1) return false;
     if (P.FirstTime === 'True' && ev.type === 'lifeGained' && this.players[ev.player].lifeGainedThisTurn !== ev.amount) return false;
     if (trig.mode === 'DamageDoneOnce') {
       const key = `${this.damageBatch}:${ev.type}:${src.id}:${src.def.triggers.indexOf(trig)}`;
@@ -1814,6 +1819,16 @@ export class Game {
         break;
       }
       case 'Effect': this.createEffect(eff, sub, def); break;
+      case 'AddPhase': {
+        // "After this phase, there is an additional combat phase" (only extra combats are modeled)
+        if (!/Combat/.test(P.ExtraPhase ?? '') || this.active !== ctx.p) break;
+        const svars = def?.svars ?? {};
+        const setupText = P.ExtraPhaseDelayedTriggerExcute ? svars[P.ExtraPhaseDelayedTriggerExcute] : undefined;
+        const setup = setupText && def ? compileEffect({ name: def.name, svars, get: () => undefined, all: () => [] } as never, setupText, []) : undefined;
+        this.extraCombats.push({ eff: setup, ctx: setup ? { ...sub, remembered: [], chosen: [] } : undefined });
+        this.trace(`${def?.name}: an additional combat phase follows`, ctx.p);
+        break;
+      }
       case 'Animate': {
         const perms = (needsTargets ? targets : defined()).flatMap(t => t.kind === 'perm' ? [t.perm] : []);
         for (const perm of perms) if (this.bf.includes(perm)) this.animate(perm, P, /Permanent|Perpetual/.test(P.Duration ?? ''), sub);
@@ -1992,6 +2007,7 @@ export class Game {
     AI.combatTricks(this, this.players[ap], this.players[dp], fighting, blocks);
     this.resolveCombatDamage(fighting, blocks);
     for (const pl of this.players) pl.pool = [];   // mana empties at end of combat
+    for (const x of this.bf) { x.attacking = false; x.blocking = false; }   // combat is over (another may follow)
   }
 
   /**
