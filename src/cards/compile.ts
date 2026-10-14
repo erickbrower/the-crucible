@@ -13,13 +13,13 @@ export const SUPPORTED_APIS = new Set([
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
-  'AddPhase',
+  'AddPhase', 'MultiplyCounter',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
-  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled',
+  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled', 'Scry', 'Surveil',
 ]);
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',

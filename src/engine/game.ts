@@ -50,7 +50,12 @@ export interface Ctx {
   spell?: StackItem;
   remembered?: CardInst[];         // cards an earlier step of this effect chain "remembered" (Forge RememberChanged etc.)
   chosen?: CardInst[];             // cards a ChooseCard step picked (Forge ChosenCard)
+  resolvedThisTurn?: number;       // how many times this triggered ability has resolved this turn, counting this one
 }
+
+const KEYWORD_COUNTERS: Record<string, string> = Object.fromEntries(
+  ['Flying', 'First Strike', 'Double Strike', 'Deathtouch', 'Hexproof', 'Indestructible', 'Lifelink', 'Menace', 'Reach', 'Trample', 'Vigilance', 'Haste']
+    .map(k => [k.replace(' ', '').toUpperCase(), k]));
 
 interface ManaUnit { group: number; perm?: Perm; colors: Color[]; land: boolean; treasure: boolean; any: boolean; poolIdx?: number; convoke?: boolean }
 
@@ -299,6 +304,8 @@ export class Game {
     } else if (d.ptStar) { const v = this.starValue(perm); power += v.p; toughness += v.t; }
     const kws = new Set<string>(d.keywords.map(k => k.split(':')[0]));
     perm.tempKw.forEach(k => kws.add(k));
+    // keyword counters (a trample counter, a flying counter...)
+    for (const [k, n] of Object.entries(perm.counters)) if (n > 0 && KEYWORD_COUNTERS[k.toUpperCase()]) kws.add(KEYWORD_COUNTERS[k.toUpperCase()]);
     // A static whose size counts other creatures ("+1/+1 for each creature with power 4 or greater") would ask
     // for those creatures' stats, which ask this static again. Nested lookups skip statics (printed stats,
     // counters and temporary effects only), the same way condDepth guards "as long as" conditions.
@@ -488,6 +495,7 @@ export class Game {
     if ((m = expr.match(/^Count\$PromisedGift\.(\d+)\.(\d+)/))) return (ctx.spell?.gift ?? ctx.source?.giftPromised) ? +m[1] : +m[2];
     if ((m = expr.match(/^Count\$Compare .*\.(\d+)\.(\d+)$/))) return +m[2];
     if (/^Count\$xPaid/.test(expr)) return ctx.x;
+    if (/^Count\$ResolvedThisTurn/.test(expr)) return ctx.resolvedThisTurn ?? 1;
     if (/^Count\$YourLifeTotal/.test(expr)) return me.life;
     if (/^Count\$YourSpeed/.test(expr)) return me.speed ?? 0;
     if (/^Count\$(LifeYouGainedThisTurn|YourLifeGainedThisTurn)/.test(expr)) return me.lifeGainedThisTurn;
@@ -1345,6 +1353,7 @@ export class Game {
   }
 
   private triggerCounts = new Map<string, number>();
+  private resolvedCounts = new Map<string, number>();
   damageBatch = 0;                 // combat damage step (or one noncombat damage event): "one or more ... deal damage" triggers once per batch
   private inCombatDamage = false;
   private onceFired = new Set<string>();
@@ -1364,7 +1373,8 @@ export class Game {
     }
     const lim = P.ActivationLimit ? parseInt(P.ActivationLimit, 10) : NaN;
     if (!isNaN(lim)) {
-      const key = `${this.turn}:${this.active}:${src.id}:${src.def.triggers.indexOf(trig)}`;
+      // a "Secondary" trigger is the same ability as its primary ("whenever you scry or surveil"): share the count
+      const key = `${this.turn}:${this.active}:${src.id}:${P.TriggerDescription ?? src.def.triggers.indexOf(trig)}`;
       const n = this.triggerCounts.get(key) ?? 0;
       if (n >= lim) return false;
       this.triggerCounts.set(key, n + 1);
@@ -1458,6 +1468,12 @@ export class Game {
         if (P.ValidActivatingPlayer === 'You' && ev.player !== controller) return false;
         return !P.ValidCard || matches(P.ValidCard, this.subjectOf(ev.card, ev.player), ctx);
       }
+      case 'Scry': case 'Surveil': {
+        if (ev.type !== 'scry' || !onBf || ev.surveil !== (trig.mode === 'Surveil')) return false;
+        if (P.ValidPlayer === 'You' && ev.player !== controller) return false;
+        if (P.ValidPlayer === 'Opponent' && ev.player === controller) return false;
+        return true;
+      }
       case 'Sacrificed': {
         if (ev.type !== 'sacrificed' || !onBf) return false;
         return !P.ValidCard || matches(P.ValidCard, this.subjectOfSnapshot(ev.perm), ctx);
@@ -1486,7 +1502,7 @@ export class Game {
       if (ev.type === 'cast') { triggered.perm = ev.card; triggered.player = ev.player; }
       if (ev.type === 'damage') { triggered.perm = ev.source; triggered.amount = ev.amount; triggered.player = ev.target.kind === 'player' ? ev.target.pid : undefined; if (ev.target.kind === 'perm') triggered.target = ev.target.perm; }
       if (ev.type === 'lifeGained') { triggered.player = ev.player; triggered.amount = ev.amount; }
-      if (ev.type === 'drawn' || ev.type === 'phase' || ev.type === 'discard') triggered.player = ev.player;
+      if (ev.type === 'drawn' || ev.type === 'phase' || ev.type === 'discard' || ev.type === 'scry') triggered.player = ev.player;
       if (ev.type === 'cycled') { triggered.perm = ev.card; triggered.player = ev.player; }
       const src = this.bf.includes(t.perm as Perm) ? (t.perm as Perm) : undefined;
       const tc = t.trig.effect.params.Cost;
@@ -1496,7 +1512,10 @@ export class Game {
         if (!c.supported || c.tap || c.sacSelf || !this.payMana(t.controller, c.mana.generic, c.mana.pips, true)) continue;
         if (c.payLife) this.loseLife(t.controller, c.payLife);
       }
-      this.resolveEffect(t.trig.effect, { p: t.controller, source: src ?? (t.perm as Perm), x: 0, kicked: false, targets: [], triggered });
+      const rkey = `${this.turnSeq}:${t.perm.id}:${t.perm.def.triggers.indexOf(t.trig)}`;
+      const resolvedThisTurn = (this.resolvedCounts.get(rkey) ?? 0) + 1;
+      this.resolvedCounts.set(rkey, resolvedThisTurn);
+      this.resolveEffect(t.trig.effect, { p: t.controller, source: src ?? (t.perm as Perm), x: 0, kicked: false, targets: [], triggered, resolvedThisTurn });
       this.checkSBA();
     }
     this.resolvingDepth--;
@@ -1685,6 +1704,7 @@ export class Game {
       case 'Scry': case 'Surveil': {
         const n = this.amount(P.ScryNum ?? P.Amount ?? '1', sub, def);
         AI.scry(this, this.players[ctx.p], n, eff.api === 'Surveil');
+        if (n > 0) this.emit({ type: 'scry', player: ctx.p, surveil: eff.api === 'Surveil' });
         break;
       }
       case 'Mill': {
@@ -1819,6 +1839,16 @@ export class Game {
         break;
       }
       case 'Effect': this.createEffect(eff, sub, def); break;
+      case 'MultiplyCounter': {
+        // "double the number of +1/+1 counters" / "of each kind of counter"
+        const k = Math.max(1, this.amount(P.Multiplier ?? '2', sub, def));
+        for (const t of needsTargets ? targets : defined()) {
+          if (t.kind !== 'perm' || !this.bf.includes(t.perm)) continue;
+          const kinds = P.CounterType ? [P.CounterType] : Object.keys(t.perm.counters).filter(c => t.perm.counters[c] > 0);
+          for (const c of kinds) this.addCounters(t.perm, c, (t.perm.counters[c] ?? 0) * (k - 1));
+        }
+        break;
+      }
       case 'AddPhase': {
         // "After this phase, there is an additional combat phase" (only extra combats are modeled)
         if (!/Combat/.test(P.ExtraPhase ?? '') || this.active !== ctx.p) break;
@@ -2110,6 +2140,7 @@ export type GEvent =
   | { type: 'drawn'; player: number; nth: number; card: CardInst }
   | { type: 'discard'; player: number; card: CardInst }
   | { type: 'sacrificed'; perm: Perm }
-  | { type: 'cycled'; player: number; card: CardInst };
+  | { type: 'cycled'; player: number; card: CardInst }
+  | { type: 'scry'; player: number; surveil: boolean };
 
 export type { Ability };
