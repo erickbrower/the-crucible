@@ -131,8 +131,10 @@ for both Standard formats (from Forge's own Standard set list and bans), cards w
 and that the engine can play a few games with it.
 
 **Caveat:** the Competitive Brawl decks are near-Vintage power (Force of Will, Library of Alexandria) and
-about half of their nonland cards are only partly modeled, as are the Standard reanimator and control
-lists' key cards. Those opponents play below their real strength, so results against them read high.
+a third to half of their nonland cards are still only partly modeled (as of October 14, 2026: 43-75% fully
+modeled per deck). Standard and Standard Brawl meta decks are 64-97% fully modeled; Azorius Control, Jeskai
+Artifacts and Mono-Red Burn are the least complete. Opponents with gaps play below their real strength,
+so results against them read high.
 
 To refresh a gauntlet, replace its `meta-*.txt` files with new lists in the same format (keep the header
 comment with the source and date) and run `npm test`.
@@ -176,6 +178,15 @@ Also supported, each with its own test file:
 - **Counters** (`counters.test.ts`): "whenever you scry or surveil" (Denzilore, Saheeli, Prudent Fateseer),
   doubling counters (Ultimate Spider-Man, Bristly Bill, Mossborn Hydra, Scythecat Cub's second landfall),
   and keyword counters (a trample counter gives trample).
+- **Meta mechanics** (`meta.test.ts`): Leylines and Gemstone Caverns start in play from the opening hand;
+  Evoke (mana or pitch costs; the AI evokes when the enters trigger is worth a card); token copies
+  (Three Steps Ahead, Ardyn); cost increases (Thalia, Disruptor Flute) and a card's own reductions (Ghalta);
+  "as this enters, choose a creature type / card name"; "other creatures enter with an extra counter"
+  (Gev, Giada); delayed triggers (Mana Drain's mana, Mistrise Village's uncounterable spell); abilities and
+  triggers granted by statics (Adagia at 12 charge); land-played triggers; "can't be activated" locks.
+- **Graveyard decks** (`meta.test.ts`): Delve, mass reanimation (Raise the Past, Bringer of the Last Gift),
+  Superior Spider-Man entering as a copy of a graveyard creature, rituals cast only when they enable a
+  spell, trigger costs that discard (Formidable Speaker), and a reanimator AI that discards its fatties.
 - **Hand disruption, conditions, Impending, granted mana** (`chunk1.test.ts`): Deep-Cavern Bat exiles the
   opponent's best nonland card until it leaves, then the card goes back to their hand. "If ..." conditions
   on effects are checked (Prophesied End, Beorn the Fierce, Shadow of the Goblin). Overlords can be cast for
@@ -206,10 +217,10 @@ indestructible.
 - Triggered and activated abilities resolve immediately instead of using the stack, so they
   can't be responded to.
 - Anything listed by `coverage` is ignored or approximated. Examples: adventures and omens
-  (only the creature half), Disguise, Plot, Saddle, Evoke, graveyard-cast abilities other
+  (only the creature half), Disguise, Plot, Saddle, graveyard-cast abilities other
   than flashback, "can't be countered", most replacement effects, non-mana abilities granted by
   statics, Animate or temporary effects, and spell-side backs of modal double-faced cards. Across
-  Erick's decks and all gauntlets, 264 of 971 distinct cards still have at least one such note
+  Erick's decks and all gauntlets, 233 of 971 distinct cards still have at least one such note
   (346 before October 12, 2026; 298 before October 14).
 - Vehicles are only crewed to attack, never to block. Stations are charged after combat.
 - No hidden-information modeling: the AI sees both hands, so "look at their hand" adds nothing beyond
