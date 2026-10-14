@@ -612,8 +612,9 @@ function costPenalty(g: Game, p: Player, perm: Perm, ab: Ability): number {
 
 function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
   const acts: Action[] = [];
+  const granting = g.bf.some(x => x.def.statics.some(st => st.params.AddAbility));
   for (const perm of g.bf.filter(x => x.controller === p.id)) {
-    perm.def.abilities.forEach((ab, idx) => {
+    [...perm.def.abilities, ...(granting ? g.grantedAbilities(perm).filter(a => a.kind === 'activated') : [])].forEach((ab, idx) => {
       if (ab.kind !== 'activated') return;
       if (window === 'instant' && (ab.sorcerySpeed || ab.planeswalker)) return;
       const key = `${g.turn}:${g.active}:${g.phase}:${perm.id}:${idx}`;
@@ -708,6 +709,41 @@ function warpActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'):
   return acts;
 }
 
+/** Does this effect (or a later step) put a creature card from a graveyard onto the battlefield? */
+export function reanimates(eff: Effect | undefined, depth = 0): boolean {
+  if (!eff || depth > 8) return false;
+  const P = eff.params;
+  if (/^ChangeZone(All)?$/.test(eff.api) && /Graveyard/.test(P.Origin ?? '') && P.Destination === 'Battlefield') return true;
+  return reanimates(eff.sub, depth + 1) || (eff.choices ?? []).some(c => reanimates(c, depth + 1));
+}
+const cardReanimates = (d: CardDef) => reanimates(d.spell?.effect) || d.abilities.some(a => reanimates(a.effect))
+  || d.triggers.some(t => reanimates(t.effect)) || (d.chapters ?? []).some(e => reanimates(e));
+
+/**
+ * Evoke: cast a creature for its evoke cost when its enters trigger is worth a card (it's sacrificed right away),
+ * especially when we can bring it back from the graveyard.
+ */
+function evokeActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window === 'instant') return [];
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    if (!c.def.keywords.some(k => k.startsWith('Evoke:')) || g.canCast(p.id, c)) continue;
+    const cost = g.evokeCost(p.id, c);
+    if (!cost) continue;
+    const ctx: Ctx = { p: p.id, card: c, x: 0, kicked: false, targets: [] };
+    const etbs = c.def.triggers.filter(t => t.mode === 'ChangesZone' && t.params.Destination === 'Battlefield' && /Self/.test(t.params.ValidCard ?? '') && t.effect);
+    let etb = etbs.reduce((a, t) => a + effectScore(g, t.effect!, ctx), 0);
+    // removal is weighed the same way as a removal spell (see planSpell)
+    if (etb >= 3 && etbs.some(t => isHarmful(t.effect!) && t.effect!.params.ValidTgts !== undefined)) etb = etb * 1.3 + 3;
+    const pitched = cost.parts.filter(x => x.kind === 'ExileFromHand').length;
+    const reanimator = [...p.hand, ...g.bf.filter(x => x.controller === p.id), ...p.command].some(x => x !== c && cardReanimates(x.def));
+    const score = etb + (reanimator ? 3 : 0) - pitched * 2.5 - cardValue(g, p, c) * 0.3;
+    if (score < 1.5) continue;
+    acts.push({ score, label: `evoke ${c.def.name}`, run: () => g.castSpell(p.id, c, { evoke: true }) });
+  }
+  return acts;
+}
+
 /**
  * Impending (the Overlords): when the full cost is out of reach, cast it for the impending cost for the
  * enters trigger now; it becomes a creature a few turns later.
@@ -791,6 +827,7 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
     }
     acts.push(...warpActions(g, p, window));
     acts.push(...impendingActions(g, p, window));
+    acts.push(...evokeActions(g, p, window));
     acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
     acts.push(...cycleActions(g, p));
@@ -1232,6 +1269,24 @@ export function scry(g: Game, p: Player, n: number, surveil: boolean) {
   }
   if (surveil) p.graveyard.push(...away); else p.library.unshift(...away);
   p.library.push(...keep);
+}
+
+/** "Choose a creature type": the most common one among our creatures (board, hand, library, command zone). */
+export function chooseCreatureType(g: Game, pid: number): string | undefined {
+  const p = g.players[pid];
+  const counts = new Map<string, number>();
+  for (const x of [...g.bf.filter(b => b.controller === pid), ...p.hand, ...p.library, ...p.graveyard, ...p.command])
+    if (x.def.types.includes('Creature')) for (const t of x.def.subtypes) counts.set(t, (counts.get(t) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+/** "Choose a card name" (Disruptor Flute): the opponent's commander, otherwise their best nonland card. */
+export function chooseCardName(g: Game, pid: number): string | undefined {
+  const o = g.players[g.opp(pid)];
+  const cmd = o.command[0] ?? g.bf.find(x => x.isCommander && x.owner === o.id);
+  if (cmd) return cmd.def.name;
+  const pool = [...o.hand, ...o.library].filter(c => !c.def.types.includes('Land'));
+  return pool.length ? pool.reduce((a, b) => (cardValue(g, o, a) >= cardValue(g, o, b) ? a : b)).def.name : undefined;
 }
 
 export function chooseSearch(g: Game, p: Player, opts: CardInst[], dest: string): CardInst {

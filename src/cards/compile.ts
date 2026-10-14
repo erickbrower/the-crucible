@@ -13,10 +13,11 @@ export const SUPPORTED_APIS = new Set([
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
-  'AddPhase', 'MultiplyCounter', 'RevealHand',
+  'AddPhase', 'MultiplyCounter', 'RevealHand', 'NameCard', 'CopyPermanent', 'DelayedTrigger',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
+// ChooseType and NameCard run when they're part of an ETBReplacement; RaiseCost statics with a numeric amount are applied
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
   'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled', 'Scry', 'Surveil',
@@ -24,7 +25,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending', 'MayEffectFromOpeningHand', 'Evoke',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -107,6 +108,10 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
   else if (api === 'Animate' && (params.Triggers || params.Abilities || params.HiddenKeywords
     || (params.staticAbilities && !params.staticAbilities.split(',').every(n => continuousSupported(face.svars, parseParams(face.svars[n.trim()] ?? '')))))) notes.push('animate: granted abilities ignored');
+  else if (api === 'DelayedTrigger') {
+    if (!['Phase', 'SpellCast'].includes(params.Mode)) notes.push(`delayed trigger "${params.Mode}" ignored`);
+    else if (params.Execute && face.svars[params.Execute] && depth < 8) compileEffect(face, face.svars[params.Execute], notes, depth + 1);   // notes only
+  }
   else if (api === 'AddPhase' && !/Combat/.test(params.ExtraPhase ?? '')) notes.push(`extra phase "${params.ExtraPhase}" ignored`);
   void SILENT_APIS;
   if (api === 'Charm' && params.Choices && depth < 6) {
@@ -126,9 +131,10 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
 /** A continuous static whose every change the engine applies: pumps, keywords, and granted mana abilities. */
 export function continuousSupported(svars: Record<string, string>, st: Record<string, string>): boolean {
   if (st.Mode !== 'Continuous') return false;
-  const changes = Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k));
+  const changes = Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k) && k !== 'AddSVar');
   return changes.length > 0 && changes.every(k => ['AddPower', 'AddToughness', 'AddKeyword'].includes(k)
-    || (k === 'AddAbility' && st.AddAbility.split(' & ').every(n => /^AB\$ Mana\b/.test(svars[n] ?? ''))));
+    || (k === 'AddAbility' && st.AddAbility.split(' & ').every(n => /^AB\$/.test(svars[n] ?? '')))
+    || (k === 'AddTrigger' && st.AddTrigger.split(' & ').every(n => SUPPORTED_TRIGGERS.has(parseParams(svars[n] ?? '').Mode))));
 }
 
 /** Temporary statics the engine applies: pumps, keywords, "can't block/attack", "can't be blocked". */
@@ -149,11 +155,11 @@ export function effectGaps(face: { svars: Record<string, string> }, params: Reco
   for (const st of list('StaticAbilities')) {
     if (st.Mode === 'Continuous' && st.MayPlay) {
       if (!/IsRemembered/.test(st.Affected ?? '') || (st.AffectedZone && st.AffectedZone !== 'Exile')) out.push(`effect: may play "${st.Affected}" ignored`);
-      if (!/Remembered|Targeted|ChosenCard/.test(params.RememberObjects ?? '')) out.push('effect: may play without remembered cards ignored');
+      if (!/Remembered|Targeted|ChosenCard|TriggeredCard/.test(params.RememberObjects ?? '')) out.push('effect: may play without remembered cards ignored');
     } else if (!tempStaticSupported(st)) out.push(`effect static "${st.Mode}${st.Mode === 'Continuous' ? ' ' + Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k)).join('+') : ''}" ignored`);
   }
   for (const t of list('Triggers')) out.push(`effect trigger "${t.Mode}" ignored`);
-  for (const r of list('ReplacementEffects')) out.push(`effect replacement "${r.Event}" ignored`);
+  for (const r of list('ReplacementEffects')) if (!(r.Event === 'Counter' && /IsRemembered/.test(r.ValidCard ?? ''))) out.push(`effect replacement "${r.Event}" ignored`);
   if (!params.StaticAbilities && !params.Triggers && !params.ReplacementEffects) out.push('ignored effect "Effect"');
   return out;
 }
@@ -278,12 +284,20 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     const m = params.Mode;
     if (m === 'Continuous') {
       if (params.CharacteristicDefining && !params.AddType && !params.AddAbility && !params.AddTrigger && !params.RemoveAllAbilities) { /* computed by the engine */ }
-      else if (continuousSupported(face.svars, params)) { /* pumps, keywords, granted mana abilities */ }
+      else if (continuousSupported(face.svars, params)) {
+        // pumps, keywords, granted abilities and triggers: the granted effects' own gaps still count
+        for (const n of (params.AddAbility ?? '').split(' & ').filter(Boolean)) compileEffect(face, face.svars[n], notes);
+        for (const n of (params.AddTrigger ?? '').split(' & ').filter(Boolean)) { const tp = parseParams(face.svars[n] ?? ''); if (tp.Execute && face.svars[tp.Execute]) compileEffect(face, face.svars[tp.Execute], notes); }
+      }
+      else if (params.AffectedDefined === 'Self' && params.AddType === 'ChosenType') { /* Multiversal Passage: the chosen basic type */ }
+      else if (/Creature/.test(params.AddType ?? '') && face.all('K').some(k => k.startsWith('Station')) && !params.RemoveAllAbilities) { /* station: becomes a creature */ }
       else if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
     } else if (m === 'AlternativeCost' && /^Spell/.test(params.ValidSA ?? '') && (params.ValidCard ?? 'Card.Self') === 'Card.Self'
       && ((params.Cost ?? '').match(/\w+<[^>]*>|\S+/g) ?? []).every(t => !/</.test(t) || /^(PayLife|ExileFromHand|Return|Sac)</.test(t))) {
       // free spells ("if you control a commander") and pitch costs (life, exile from hand, return a land, sacrifice)
+    } else if (m === 'RaiseCost' && !params.ValidTarget && !params.Cost && /Spell/.test(params.Type ?? 'Spell')) {
+      // "spells cost {N} more" (Thalia, Disruptor Flute)
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {
       notes.push(`static "${m}" ignored`);
     }
@@ -293,6 +307,8 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     if (types.includes('Land') && (r.Event === 'Moved')) continue;
     if (/DamageAmount/.test(face.svars[r.ReplaceWith ?? ''] ?? '') || r.Event === 'DamageDone') continue;
     if (r.Event === 'Moved' && (r.ReplaceWith ?? '').toLowerCase().includes('tap')) continue;
+    // "if you would gain life, you gain that much life plus 1 instead" is applied by the engine
+    if (r.Event === 'GainLife' && /you gain that much life plus 1 instead/i.test(face.get('Oracle') ?? '')) continue;
     notes.push(`replacement "${r.Event}" ignored`);
   }
   const def: CardDef = {

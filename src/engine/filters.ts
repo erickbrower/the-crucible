@@ -26,6 +26,7 @@ export interface FilterCtx {
   sourceId?: number;
   sourceAttachedTo?: number;
   chosenType?: string;
+  namedCard?: string;      // "the chosen name" (Disruptor Flute)
 }
 
 const TYPE_WORDS = new Set(['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker', 'Instant', 'Sorcery', 'Battle', 'Kindred']);
@@ -86,6 +87,7 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     case 'token': return !!s.token;
     case 'PromisedGift': return !!s.giftPromised;
     case 'IsCommander': return !!s.isCommander;
+    case 'NamedCard': return !!ctx.namedCard && s.def?.name === ctx.namedCard;
     case 'nonToken': return !s.token;
     case 'tapped': return !!s.tapped;
     case 'untapped': return !s.tapped;

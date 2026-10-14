@@ -29,6 +29,7 @@ export interface Perm extends CardInst {
   blocking?: boolean;
   loyaltyUsedTurn?: number;
   chosenType?: string;
+  namedCard?: string;       // "as this enters, choose a card name"
   noUntap?: boolean;
   earthbent?: boolean;
   baseDef?: CardDef;
@@ -68,7 +69,7 @@ export interface Player {
   speedTurn?: number;       // turn the speed last increased
   warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn
   mayPlay?: { card: CardInst; untilSeq: number; free?: boolean }[];   // exiled cards this player may play (impulse draw) until turn #untilSeq ends
-  pool?: Color[];           // floating mana (firebending), emptied at end of combat and cleanup
+  pool?: (Color | 'C')[];   // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }
 
