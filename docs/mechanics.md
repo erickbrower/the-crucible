@@ -12,9 +12,9 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 
 | | Used by these decks | All 264 mechanics |
 |---|---|---|
-| ✅ supported | 60 | 63 |
+| ✅ supported | 71 | 74 |
 | 🟡 partial | 4 | 4 |
-| ❌ missing | 35 | 35 |
+| ❌ missing | 24 | 24 |
 | ❔ unflagged | 21 | 21 |
 | · not modeled | 0 | 141 |
 
@@ -22,24 +22,15 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 
 | Mechanic | Rule | Status | Erick's decks | Gauntlet decks | Cards with gaps (or examples) |
 |---|---|---|---|---|---|
-| Protection | 702.16 | ❌ missing |  | 6 | Mother of Runes, Emrakul, the Aeons Torn |
-| Escape | 702.138 | ❌ missing |  | 5 | Alex Wilder, Runaway, Phlage, Titan of Fire's Fury, Cling to Dust, Uro, Titan of Nature's Wrath, … |
-| Craft | 702.167 | ❌ missing |  | 4 | Clay-Fired Bricks, Spring-Loaded Sawblades, Braided Net, The Enigma Jewel |
-| Bestow | 702.103 | ❌ missing |  | 3 | Detective's Phoenix, Springheart Nantuko |
 | Devoid | 702.114 | ❌ missing |  | 3 | Ghostfire Slice |
-| Plot | 702.170 | ❌ missing |  | 3 | Slickshot Show-Off |
-| Saddle | 702.171 | ❌ missing | 1 | 2 | Brightfield Glider, Switchgrass Grazer |
-| Tiered | 702.183 | ❌ missing |  | 3 | Restoration Magic, Fire Magic |
 | Dash | 702.109 | ❌ missing |  | 2 | Zurgo Bellstriker |
 | Disturb | 702.146 | ❌ missing |  | 2 | Lantern Bearer, Dennick, Pious Apprentice |
 | Fading | 702.32 | ❌ missing |  | 2 | Parallax Wave |
 | Harmonize | 702.180 | ❌ missing |  | 2 | Wild Ride |
-| Mayhem | 702.187 | ❌ missing | 2 |  | Scarlet Spider, Kaine, Swarm, Being of Bees |
 | Riot | 702.136 | ❌ missing |  | 2 | Spider-Punk |
 | Storied | 702.195 | ❌ missing |  | 2 | Kíli the Resourceful |
 | Annihilator | 702.86 | ❌ missing |  | 1 | Ulamog, the Infinite Gyre, Emrakul, the Aeons Torn |
 | Ascend | 702.131 | ❌ missing |  | 1 | Ocelot Pride |
-| Bargain | 702.166 | ❌ missing | 1 |  | Torch the Tower |
 | Eternalize | 702.129 | ❌ missing |  | 1 | Fanatic of Rhonas |
 | Evolve | 702.100 | ❌ missing |  | 1 | Mutable Pupa |
 | Improvise | 702.126 | ❌ missing |  | 1 | Metallic Rebuke, Whir of Invention, Kappa Cannoneer |
@@ -87,16 +78,25 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Offspring | 702.175 | ✅ supported | 1 | 6 | Steampath Charger, Intrepid Rabbit, Starscape Cleric, Iridescent Vinelasher |
 | Station | 702.184 | ✅ supported |  | 7 | Adagia, Windswept Bastion, Uthros, Titanic Godcore, Extinguisher Battleship, Evendo, Waking Haven |
 | Affinity | 702.41 | ✅ supported | 3 | 3 | Claws Out, Cantankerous Keepers, Sapling Nursery, Emry, Lurker of the Loch, … |
+| Protection | 702.16 | ✅ supported |  | 6 | The One Ring, Mother of Runes, Emrakul, the Aeons Torn |
 | Delve | 702.66 | ✅ supported |  | 5 | Dig Through Time, Treasure Cruise, Temporal Trespass |
+| Escape | 702.138 | ✅ supported |  | 5 | Escape Tunnel, Alex Wilder, Runaway, Phlage, Titan of Fire's Fury, Cling to Dust, … |
 | Gift | 702.174 | ✅ supported |  | 5 | Bringer of the Last Gift, Into the Flood Maw |
 | Spree | 702.172 | ✅ supported | 4 | 1 | Insatiable Avarice, Requisition Raid, Three Steps Ahead |
+| Craft | 702.167 | ✅ supported |  | 4 | Clay-Fired Bricks, Spring-Loaded Sawblades, Braided Net, The Enigma Jewel |
 | Cycling | 702.29 | ✅ supported | 3 | 1 | Marauding Mako, Migrating Ketradon, Migration Path |
 | Sneak | 702.190 | ✅ supported |  | 4 | Leonardo, Cutting Edge, Leonardo, Leader in Blue, Splinter, Hamato Yoshi |
+| Bestow | 702.103 | ✅ supported |  | 3 | Detective's Phoenix, Springheart Nantuko |
 | Convoke | 702.51 | ✅ supported | 2 | 1 | Winter, Team Player, Selfless Safewright, Bloodline Bidding, Party Thrasher |
+| Plot | 702.170 | ✅ supported |  | 3 | Slickshot Show-Off |
+| Saddle | 702.171 | ✅ supported | 1 | 2 | Brightfield Glider, Defend the Rider, Switchgrass Grazer |
+| Tiered | 702.183 | ✅ supported |  | 3 | Restoration Magic, Fire Magic |
 | Changeling | 702.73 | ✅ supported | 1 | 1 | Graveshifter, Changeling Outcast |
 | Crew | 702.122 | ✅ supported |  | 2 | Spring-Loaded Sawblades, Defend the Rider |
 | Max Speed | 702.178 | ✅ supported |  | 2 | Perilous Snare |
+| Mayhem | 702.187 | ✅ supported | 2 |  | Scarlet Spider, Kaine, Swarm, Being of Bees |
 | Start Your Engines! | 702.179 | ✅ supported |  | 2 | Perilous Snare |
+| Bargain | 702.166 | ✅ supported | 1 |  | Torch the Tower |
 | Defender | 702.3 | ✅ supported | 1 |  | Ghalta the Immovable |
 | Firebending | 702.189 | ✅ supported |  | 1 | Fire Nation Occupation |
 | Ninjutsu | 702.49 | ✅ supported |  | 1 | Yuriko, the Tiger's Shadow, Ingenious Infiltrator, Prosperous Thief, Thousand-Faced Shadow, … |
@@ -106,9 +106,7 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 
 | Mechanic | Rule | Status | Erick's decks | Gauntlet decks | Cards with gaps (or examples) |
 |---|---|---|---|---|---|
-| Blight | 701.68 | ❌ missing | 5 | 1 | High Perfect Morcant |
 | Recruit | 701.70 | ❌ missing |  | 3 | Long Lake Nuisance, Lake-town Lookout |
-| Proliferate | 701.34 | ❌ missing | 1 | 1 | High Perfect Morcant, Cankerbloom |
 | Airbend | 701.65 | ❌ missing |  | 1 | Aang, Swift Savior |
 | Manifest Dread | 701.62 | ❌ missing |  | 1 | Verdant Dread |
 | Waterbend | 701.67 | ❌ missing |  | 1 | Aang, Swift Savior |
@@ -139,6 +137,7 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Sacrifice | 701.21 | ✅ supported | 6 | 7 | Political Triumph, Eye of Jace, Pick Your Poison, Garruk, Veiled Butcher, … |
 | Counter | 701.6 | ✅ supported | 2 | 10 | Icy Reception, Thranduil's Decree, Negate, Three Steps Ahead, … |
 | Fight | 701.14 | ✅ supported | 4 | 3 | Kapow!, Yoshimaru, Scrappy Stray, Affectionate Indrik, Troll Negotiations, … |
+| Blight | 701.68 | ✅ supported | 5 | 1 | Pyrrhic Strike, Requiting Hex, High Perfect Morcant, Blighted Blackthorn |
 | Earthbend | 701.66 | ✅ supported | 3 | 3 | Bumi, Unleashed, Ba Sing Se, Earthbender Ascension, Badgermole Cub |
 | Reveal | 701.20 | ✅ supported | 4 | 2 | Deep-Cavern Bat, Invasion of Gobakhan |
 | Transform | 701.27 | ✅ supported | 4 | 2 | Miles Morales, Trystan, Callous Cultivator, Eddie Brock, Aang, Swift Savior, … |
@@ -147,6 +146,7 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Investigate | 701.16 | ✅ supported | 1 | 3 | Novice Inspector, Hard Evidence, Dennick, Pious Apprentice, They Went This Way |
 | Explore | 701.44 | ✅ supported |  | 3 | Amalia Benavides Aguirre |
 | Amass | 701.47 | ✅ supported | 1 | 1 | Fearsome Goblin Pair, Orcish Bowmasters |
+| Proliferate | 701.34 | ✅ supported | 1 | 1 | High Perfect Morcant, Cankerbloom |
 | Activate | 701.2 | ✅ supported |  |  |  |
 | Cast | 701.5 | ✅ supported |  |  |  |
 | Connive | 701.50 | ✅ supported |  |  |  |

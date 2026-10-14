@@ -122,6 +122,7 @@ function canBlock(g: Game, b: Perm, a: Perm): boolean {
   if (!isCreature(b) || b.tapped || g.cantBlock(b) || g.unblockable(a)) return false;
   const ka = g.statsOf(a).keywords, kb = g.statsOf(b).keywords;
   if (ka.includes('Flying') && !kb.includes('Flying') && !kb.includes('Reach')) return false;
+  if (g.protectedFrom(a, b, b.controller)) return false;                 // protection: can't be blocked by it
   return true;
 }
 
@@ -255,6 +256,8 @@ export function scoreTargets(g: Game, eff: Effect, ctx: Ctx): Scored[] {
     const kws = g.statsOf(perm).keywords;
     if (kws.includes('Shroud')) continue;
     if (perm.controller !== me && kws.includes('Hexproof')) continue;
+    const tsrc = ctx.source ?? ctx.card;
+    if (tsrc && g.protectedFrom(perm, tsrc, me)) continue;
     const v = permValue(g, perm);
     let s: number;
     if (harmful) {
@@ -362,7 +365,9 @@ export function chooseSpreeModes(g: Game, pid: number, card: CardInst, generic: 
   const scored = (eff.choices ?? []).map(c => ({ c, s: effectScore(g, c, ctx) })).filter(x => x.s > 0.5).sort((a, b) => b.s - a.s);
   const chosen: Effect[] = [];
   let gen = generic, ps = [...pips];
+  const tiered = card.def.keywords.includes('Tiered');           // Tiered: exactly one mode, paying its cost
   for (const { c } of scored) {
+    if (tiered && chosen.length) break;
     const mc = parseManaCost(c.params.ModeCost);
     if (!g.payMana(pid, gen + mc.generic, [...ps, ...mc.pips], false)) continue;
     chosen.push(c); gen += mc.generic; ps = [...ps, ...mc.pips];
@@ -577,6 +582,9 @@ function costPayable(g: Game, p: Player, perm: Perm, ab: Ability): boolean {
   if (c.tap && (perm.tapped || (isCreature(perm) && perm.sick && !g.has(perm, 'Haste')))) return false;
   if (c.payLife && p.life <= c.payLife + 2) return false;
   if (c.discard && p.hand.length < c.discard) return false;
+  if (c.blight && !g.cheapBlight(p.id, c.blight)) return false;
+  if (c.tapType && tapTypeFodder(g, p, c.tapType).length < c.tapType.n) return false;
+  if (ab.effect.params.Activation === 'Solved' && !perm.attrs?.includes('Solved')) return false;
   if (c.sac && sacFodder(g, p, perm, c.sac).length < c.sac.n) return false;
   if (c.loyalty !== undefined) {
     if (perm.loyaltyUsedTurn === g.turn || c.loyalty === -1 && ab.effect.params.Planeswalker === undefined && false) return false;
@@ -595,6 +603,12 @@ function costPayable(g: Game, p: Player, perm: Perm, ab: Ability): boolean {
   return true;
 }
 
+/** Untapped creatures of a kind to tap for a cost ("Tap three untapped Elves you control"), least useful first. */
+function tapTypeFodder(g: Game, p: Player, t: { n: number; filter: string }) {
+  return g.bf.filter(x => x.controller === p.id && !x.tapped && matches(t.filter, g.subjectOf(x), { you: p.id }))
+    .sort((a, b) => permValue(g, a) - permValue(g, b));
+}
+
 function sacFodder(g: Game, p: Player, perm: Perm, sac: { n: number; filter: string }) {
   return g.bf.filter(x => x.controller === p.id && matches(sac.filter, g.subjectOf(x), { you: p.id, sourceId: perm.id }));
 }
@@ -606,6 +620,8 @@ function payCost(g: Game, p: Player, perm: Perm, ab: Ability): number {
   if (c.mana.generic || c.mana.pips.length) g.payMana(p.id, c.mana.generic, c.mana.pips, true);
   if (c.payLife) g.loseLife(p.id, c.payLife);
   if (c.discard) for (let i = 0; i < c.discard; i++) { const d = chooseDiscard(g, p); if (d) g.discard(p, d); }
+  if (c.blight) g.blight(p.id, c.blight);
+  if (c.tapType) for (const x of tapTypeFodder(g, p, c.tapType).slice(0, c.tapType.n)) x.tapped = true;
   if (c.sac) for (let i = 0; i < c.sac.n; i++) {
     const opts = sacFodder(g, p, perm, c.sac).filter(x => x !== perm);
     if (!opts.length) break;
@@ -628,6 +644,8 @@ function costPenalty(g: Game, p: Player, perm: Perm, ab: Ability): number {
   }
   if (c.payLife) pen += c.payLife * (p.life < 10 ? 0.8 : 0.25);
   if (c.discard) pen += 1.5 * c.discard;
+  if (c.blight) pen += c.blight * 0.8;
+  if (c.tapType) pen += c.tapType.n * 0.7;
   if (c.tap && isCreature(perm) && g.phase !== 'end' && g.active === p.id && g.phase === 'main1') pen += 2;
   return pen;
 }
@@ -767,6 +785,52 @@ function evokeActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant')
   return acts;
 }
 
+/** Where a bestowed Aura goes: our best creature. */
+export function bestowHost(g: Game, pid: number, self: Perm): Perm | undefined {
+  const mine = myCreatures(g, pid).filter(x => x !== self);
+  return mine.length ? mine.reduce((a, b) => (permValue(g, a) >= permValue(g, b) ? a : b)) : undefined;
+}
+
+/** Bestow, plot and craft. */
+function altCastActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window === 'instant') return [];
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const bc = g.keywordCost(c, 'Bestow');
+    if (bc !== undefined && myCreatures(g, p.id).length && g.canCast(p.id, c, { altCost: bc })) {
+      // an Aura that leaves a creature behind: a little better than the creature alone when we have a host
+      acts.push({ score: 5.5 + cardValue(g, p, c), label: `bestow ${c.def.name}`, run: () => g.castSpell(p.id, c, { bestow: true }) });
+    }
+    const pc = g.keywordCost(c, 'Plot');
+    if (pc !== undefined && window === 'main2' && !g.canCast(p.id, c)) {
+      const mc = parseManaCost(pc);
+      if (g.payMana(p.id, mc.generic, mc.pips, false)) acts.push({ score: 1.2, label: `plot ${c.def.name}`, run: () => g.plot(p.id, c) });
+    }
+  }
+  for (const perm of g.bf.filter(x => x.controller === p.id && x.def.keywords.some(k => k.startsWith('Craft:')))) {
+    if (g.craftCost(p.id, perm)) acts.push({ score: 4, label: `craft ${perm.def.name}`, run: () => g.craft(p.id, perm) });
+  }
+  return acts;
+}
+
+/** Escape and mayhem: cast cards from the graveyard. */
+function graveyardCastActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  const acts: Action[] = [];
+  for (const c of p.graveyard) {
+    const escape = c.def.keywords.some(k => k.startsWith('Escape:')) && !!g.escapeCost(p.id, c);
+    const mayhem = !escape && g.mayhemCastable(p.id, c);
+    if (!escape && !mayhem) continue;
+    if (window === 'instant' && !isInstantSpeed(c.def)) continue;
+    let score: number;
+    if (c.def.spell && !g.isPermanentSpell(c.def)) {
+      score = effectScore(g, c.def.spell.effect, { p: p.id, card: c, x: 0, kicked: false, targets: [] });
+      if (score <= 1) continue;
+    } else score = 5 + cardValue(g, p, c);
+    acts.push({ score: score + 0.5, label: `${escape ? 'escape' : 'mayhem'} ${c.def.name}`, run: () => g.castSpell(p.id, c, escape ? { escape: true } : { mayhem: true }) });
+  }
+  return acts;
+}
+
 /**
  * Impending (the Overlords): when the full cost is out of reach, cast it for the impending cost for the
  * enters trigger now; it becomes a creature a few turns later.
@@ -851,6 +915,14 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
     acts.push(...warpActions(g, p, window));
     acts.push(...impendingActions(g, p, window));
     acts.push(...evokeActions(g, p, window));
+    acts.push(...graveyardCastActions(g, p, window));
+    acts.push(...altCastActions(g, p, window));
+    // plotted cards: cast free on a later turn
+    for (const x of p.plotted ?? []) {
+      if (x.seq >= g.turnSeq || !g.inExile(x.card)) continue;
+      const plan = planSpell(g, p, x.card, false, window);
+      if (plan) acts.push(castAction(g, p, x.card, false, { ...plan, fromExile: true }));
+    }
     acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
     acts.push(...cycleActions(g, p));
@@ -925,6 +997,20 @@ export function crewVehicles(g: Game, p: Player) {
     if (total < n) continue;
     const lost = crew.filter(canAttack).reduce((a, c) => a + g.statsOf(c).power, 0);
     if ((v.def.power ?? 0) > lost) g.crew(v, crew);
+  }
+}
+
+/** Saddle before attacking, with creatures that can't attack this turn (summoning sick) or matter least. */
+export function saddleMounts(g: Game, p: Player) {
+  for (const m of g.bf.filter(x => x.controller === p.id && !x.tapped && x.def.keywords.some(k => k.startsWith('Saddle:')) && !x.attrs?.includes('Saddled'))) {
+    if (m.sick && !g.has(m, 'Haste')) continue;
+    const n = parseInt(m.def.keywords.find(k => k.startsWith('Saddle:'))!.split(':')[1], 10);
+    const idle = myCreatures(g, p.id).filter(c => c !== m && !c.tapped && g.statsOf(c).power > 0 && c.sick && !g.has(c, 'Haste'))
+      .sort((a, b) => g.statsOf(a).power - g.statsOf(b).power);
+    const riders: Perm[] = [];
+    let total = 0;
+    for (const c of idle) { if (total >= n) break; riders.push(c); total += g.statsOf(c).power; }
+    if (total >= n) g.saddle(m, riders);
   }
 }
 

@@ -32,6 +32,8 @@ export interface Cost {
   discard?: number;
   payLife?: number;
   loyalty?: number;                    // +N / -N for planeswalker abilities
+  blight?: number;                     // put N -1/-1 counters on a creature you control
+  tapType?: { n: number; filter: string };   // tap N untapped creatures of a kind you control
   supported: boolean;
 }
 

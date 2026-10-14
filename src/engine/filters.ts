@@ -19,6 +19,8 @@ export interface Subject {
   counters?: Record<string, number>;
   giftPromised?: boolean;
   isCommander?: boolean;
+  attrs?: string[];
+  escaped?: boolean;
 }
 
 export interface FilterCtx {
@@ -89,6 +91,10 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     case 'token': return !!s.token;
     case 'PromisedGift': return !!s.giftPromised;
     case 'IsCommander': return !!s.isCommander;
+    case 'IsSuspected': return !!s.attrs?.includes('Suspected');
+    case 'IsSolved': return !!s.attrs?.includes('Solved');
+    case 'IsSaddled': return !!s.attrs?.includes('Saddled');
+    case 'escaped': return !!s.escaped;
     case 'NamedCard': return !!ctx.namedCard && s.def?.name === ctx.namedCard;
     case 'nonToken': return !s.token;
     case 'tapped': return !!s.tapped;
