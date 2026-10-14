@@ -38,7 +38,16 @@ npm run sim -- match    <deckA.txt> <deckB.txt> [--games 500] [--format standard
 npm run sim -- gauntlet <deck.txt> [dir] [--games 300]      # dir defaults to the deck's format's gauntlet
 npm run sim -- coverage <deck.txt>        # which cards the engine ignores or approximates
 npm run sim -- trace    <deckA.txt> <deckB.txt> [--seed 1]   # play-by-play of one game
+npm run sim -- mechanics [--md docs/mechanics.md] [--defs]  # every rules keyword vs the engine and the decks
 ```
+
+### Mechanics coverage
+
+`npm run fetch-rules` downloads Wizards' Comprehensive Rules (TXT) into `vendor/rules/` (not committed;
+pass the newest link from https://magic.wizards.com/en/rules when Wizards updates them). `npm run sim --
+mechanics` then lists every keyword action (rule 701) and keyword ability (rule 702) as supported, partial,
+missing or unflagged, with how many of Erick's decks and gauntlet decks use it and which cards report a gap.
+`--defs` prints each rule's first sentence. [docs/mechanics.md](docs/mechanics.md) is the latest report.
 
 The format comes from the first deck: Standard without a commander, Standard Brawl with a commander and
 60 cards, Brawl with a commander and 100 cards.
@@ -232,6 +241,7 @@ indestructible.
 The simulator code is original and released under the [MIT License](LICENSE).
 
 Card data is read at runtime from [Forge](https://github.com/Card-Forge/forge), which is GPL-3.0.
-It is downloaded by `npm run fetch-cards` and is not redistributed here, so the MIT license covers
+It is downloaded by `npm run fetch-cards` and is not redistributed here (the same goes for Wizards'
+Comprehensive Rules, downloaded by `npm run fetch-rules`), so the MIT license covers
 only this repository's own code. Magic: The Gathering and its card names are © Wizards of the Coast;
 this is an unofficial fan project, not affiliated with or endorsed by Wizards.

@@ -4,10 +4,12 @@
 //   npm run sim -- gauntlet <deck.txt> [<gauntlet dir>] [--games 300]     (default dir: the deck's own format's gauntlet)
 //   npm run sim -- coverage <deck.txt>
 //   npm run sim -- trace <deckA.txt> <deckB.txt> [--seed 1]
+//   npm run sim -- mechanics [--md docs/mechanics.md] [--all]          (needs `npm run fetch-rules`)
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadDeck, deckCoverage, LoadedDeck } from './sim/deck.js';
 import { runMatch, pct, wilson, MatchOptions } from './sim/match.js';
+import { mechanicsReport, mechanicsMarkdown, rulesDate, RULES_FILE } from './tools/mechanics.js';
 import { Format, FORMAT_LABEL, deckFormat, engineRules, gauntletDir, parseFormat } from './sim/format.js';
 
 function parseArgs(argv: string[]) {
@@ -57,6 +59,25 @@ function printMatch(r: ReturnType<typeof runMatch>) {
 function main() {
   const { pos, flags } = parseArgs(process.argv.slice(2));
   const cmd = pos[0];
+  if (cmd === 'mechanics') {
+    if (!fs.existsSync(RULES_FILE)) { console.error('Comprehensive Rules not found: run `npm run fetch-rules` first.'); process.exit(1); }
+    const text = fs.readFileSync(RULES_FILE, 'utf8');
+    const rows = mechanicsReport(text, [{ dir: 'decks/mine', mine: true }, ...['standard', 'standard-brawl', 'brawl'].map(f => ({ dir: `decks/gauntlet/${f}`, mine: false }))]);
+    if (flags.md) {
+      fs.mkdirSync(path.dirname(flags.md), { recursive: true });
+      fs.writeFileSync(flags.md, mechanicsMarkdown(rows, rulesDate(text), flags.all === 'true'));
+      console.log(`wrote ${flags.md}`);
+    }
+    const used = rows.filter(r => r.mine.length + r.gauntlet.length);
+    console.log(`\nComprehensive Rules ${rulesDate(text) ?? ''}: ${rows.length} keyword actions and abilities, ${used.length} used by these decks`);
+    for (const s of ['missing', 'partial', 'unflagged'] as const) {
+      const l = used.filter(r => r.status === s).sort((a, b) => (b.mine.length + b.gauntlet.length) - (a.mine.length + a.gauntlet.length));
+      console.log(`\n${s.toUpperCase()} (${l.length})`);
+      for (const r of l) console.log(`  ${r.name.padEnd(26)} ${r.rule.padEnd(8)} mine ${String(r.mine.length).padStart(2)}  gauntlet ${String(r.gauntlet.length).padStart(2)}  ${r.gapCards.slice(0, 3).join(', ')}${flags.defs ? `\n      ${r.definition}` : ''}`);
+    }
+    console.log(`\nSUPPORTED and used: ${used.filter(r => r.status === 'supported').map(r => r.name).join(', ')}`);
+    return;
+  }
   if (cmd === 'match' || cmd === 'trace') {
     const A = load(pos[1]), B = load(pos[2]);
     const o = matchOpts(flags, formatOf(A, flags));

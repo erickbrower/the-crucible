@@ -7,7 +7,8 @@
     "sim": "tsx src/cli.ts",
     "ui": "tsx src/ui/server.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fetch-rules": "bash scripts/fetch-rules.sh"
   },
   "author": "",
   "license": "MIT",
