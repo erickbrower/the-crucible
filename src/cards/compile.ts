@@ -22,7 +22,7 @@ export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
   'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled', 'Scry', 'Surveil', 'LandPlayed',
 ]);
-const SUPPORTED_KEYWORDS = new Set([
+export const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
   'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending', 'MayEffectFromOpeningHand', 'Evoke', 'Delve',
