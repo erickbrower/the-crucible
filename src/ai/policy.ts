@@ -428,6 +428,19 @@ export function effectScore(g: Game, eff: Effect, ctx: Ctx, depth = 0): number {
         break;
       }
       case 'ChangeZone': s = (P.Origin ?? '').includes('Library') ? 2.5 : 1; break;
+      case 'ChangeZoneAll': {
+        // mass reanimation: what comes back for each side (Raise the Past, Bringer of the Last Gift)
+        if (P.Destination === 'Battlefield' && /Graveyard/.test(P.Origin ?? '')) {
+          for (const pl of g.players) for (const c of pl.graveyard)
+            if (matches(P.ChangeType ?? 'Card', g.subjectOf(c, pl.id), fctx))
+              s += (pl.id === me ? 1 : -1) * Math.max(1, (c.def.power ?? 0) + (c.def.toughness ?? 0) / 2 + c.def.mv * 0.3);
+        } else s = 0.5;
+        break;
+      }
+      case 'SacrificeAll': {
+        for (const x of g.bf) if (matches(P.ValidCards ?? 'Creature', g.subjectOf(x), fctx)) s += (x.controller === me ? -1 : 1) * permValue(g, x);
+        break;
+      }
       case 'LoseLife': case 'DealDamage': {
         const who = g.defined(P.Defined, ctx);
         const amt = g.amount(eff.api === 'LoseLife' ? P.LifeAmount : P.NumDmg, ctx, def);
@@ -525,6 +538,15 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
   } else {
     if (!d.spell) return undefined;
     const ctx: Ctx = { p: p.id, card, x, kicked, targets: [] };
+    if (d.spell.effect.api === 'Mana' && !d.spell.effect.sub) {
+      // rituals (Dark Ritual): only when the extra mana lets us cast something we otherwise can't this turn
+      const n = Math.max(1, g.amount(d.spell.effect.params.Amount ?? '1', ctx, d));
+      const after = g.availableMana(p.id) - d.mv + n;
+      const enables = [...p.hand, ...p.command].filter(c => c !== card && !isLandCard(c) && !g.canCast(p.id, c)
+        && c.def.mv <= after && (window !== 'instant' || isInstantSpeed(c.def)));
+      if (!enables.length) return undefined;
+      return { score: 4 + Math.max(...enables.map(c => cardValue(g, p, c))), x, kicked, sacForAlt };
+    }
     score = effectScore(g, d.spell.effect, ctx);
     const harmfulTarget = isHarmful(d.spell.effect) && d.spell.effect.params.ValidTgts !== undefined;
     if (d.types.includes('Instant') && window !== 'instant') {
@@ -717,6 +739,7 @@ export function reanimates(eff: Effect | undefined, depth = 0): boolean {
   return reanimates(eff.sub, depth + 1) || (eff.choices ?? []).some(c => reanimates(c, depth + 1));
 }
 const cardReanimates = (d: CardDef) => reanimates(d.spell?.effect) || d.abilities.some(a => reanimates(a.effect))
+  || d.keywords.some(k => k.startsWith('ETBReplacement:Copy:') && /ChoiceZone\$ Graveyard/.test(d.svars[k.split(':')[2]] ?? ''))
   || d.triggers.some(t => reanimates(t.effect)) || (d.chapters ?? []).some(e => reanimates(e));
 
 /**
@@ -1244,6 +1267,9 @@ export function combatTricks(g: Game, ap: Player, dp: Player, attackers: Perm[],
 
 // ------------------------------------------------------------------ choices
 export function chooseDiscard(g: Game, p: Player): CardInst {
+  // reanimator: a big creature in the graveyard is a resource when we hold a way to bring it back
+  const fatty = p.hand.filter(c => isCreature(c) && c.def.mv >= 5).sort((a, b) => b.def.mv - a.def.mv)[0];
+  if (fatty && [...p.hand, ...g.bf.filter(x => x.controller === p.id), ...p.command].some(x => x !== fatty && cardReanimates(x.def))) return fatty;
   const lands = p.hand.filter(isLandCard);
   if (lands.length && landsOnBf(g, p.id) + lands.length > 6) return lands[0];
   return p.hand.reduce((a, b) => (cardValue(g, p, a) <= cardValue(g, p, b) ? a : b), p.hand[0]);

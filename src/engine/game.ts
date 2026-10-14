@@ -803,7 +803,10 @@ export class Game {
       }
     }
     if (c.def.altAdditional && opts.kicked === undefined) { /* handled by caster */ }
-    return { generic, pips };
+    // Delve: each card exiled from your graveyard pays for {1}
+    let delve = 0;
+    if (c.def.keywords.includes('Delve')) { delve = Math.min(generic, this.players[pid].graveyard.filter(x => x !== c).length); generic -= delve; }
+    return { generic, pips, delve };
   }
 
   canCast(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; altCost?: string } = {}) {
@@ -1118,6 +1121,7 @@ export class Game {
       if (ok.free && opts.altCost === undefined) opts = { ...opts, altCost: '0' };
     }
     let { generic, pips } = this.spellCost(pid, c, opts);
+    const { delve } = this.spellCost(pid, c, opts);
     if (c.def.altAdditional && !opts.sacForAlt) { generic += c.def.altAdditional.orMana.generic; pips = [...pips, ...c.def.altAdditional.orMana.pips]; }
     // Spree: each chosen mode adds its own cost
     let modes: Effect[] | undefined;
@@ -1133,6 +1137,12 @@ export class Game {
       this.payPitch(pid, c, pitch);
     }
     if (opts.sacForAlt) this.leave(opts.sacForAlt, 'graveyard', { sacrificed: true });
+    if (delve && !evokePay) {
+      // exile the cards we'll miss least: lands and spells before creatures (which might come back)
+      const gy = p.graveyard.filter(x => x !== c).sort((a, b) => (Number(a.def.types.includes('Creature')) - Number(b.def.types.includes('Creature'))) || AI.cardValue(this, p, a) - AI.cardValue(this, p, b));
+      for (const x of gy.slice(0, delve)) { p.graveyard.splice(p.graveyard.indexOf(x), 1); p.exile.push(x); }
+      this.trace(`delves ${delve} card${delve > 1 ? 's' : ''}`, pid);
+    }
     if (opts.fromCommand) { p.command.splice(p.command.indexOf(c), 1); p.commanderTax += 2; this.stats.commanderCasts[pid]++; }
     else if (opts.flashback) p.graveyard.splice(p.graveyard.indexOf(c), 1);
     else if (opts.fromExile) { this.takeFromExile(c); p.warpExile = (p.warpExile ?? []).filter(w => w.card !== c); p.mayPlay = (p.mayPlay ?? []).filter(m => m.card !== c); }
@@ -1257,6 +1267,7 @@ export class Game {
 
   resolveSpell(item: StackItem) {
     const c = item.card; const pid = item.controller; const p = this.players[pid];
+    this.lastCastX = item.x;
     if (item.gift && c.def.svars.GiftAbility) {
       this.trace(`gives P${this.opp(pid)} the gift`, pid);
       this.resolveEffect(compileGift(c.def), { p: pid, card: c, x: 0, kicked: false, targets: [], spell: item });
@@ -1315,7 +1326,8 @@ export class Game {
     // "As this enters, choose a creature type / a card name / ..." (K:ETBReplacement:<kind>:<SVar>)
     for (const k of c.def.keywords.filter(x => x.startsWith('ETBReplacement:'))) {
       const parts = k.split(':');
-      if (parts.length > 4 || parts[1] !== 'Other') continue;            // others' replacements are handled below; Copy (clones) isn't
+      if (parts[1] === 'Copy') { this.enterAsCopy(perm, controller, parts[2]); continue; }
+      if (parts.length > 4 || parts[1] !== 'Other') continue;            // others' replacements are handled below
       const eff = this.compileSVar(c.def, parts[2] ?? '');
       if (eff) this.resolveEffect(eff, { p: controller, source: perm, x: 0, kicked: false, targets: [] });
     }
@@ -1339,6 +1351,39 @@ export class Game {
     if (c.def.chapters && this.bf.includes(perm)) this.addLore(perm);
     return perm;
   }
+
+  /** "You may have this enter as a copy of a creature (card in a graveyard)" (Superior Spider-Man, Mockingbird). */
+  private enterAsCopy(perm: Perm, controller: number, svar: string) {
+    const P = parseParams(perm.def.svars[svar] ?? '');
+    if (P.DB !== 'Clone') return;
+    const fctx: FilterCtx = { you: controller, sourceId: perm.id };
+    const filter = (P.Choices ?? 'Creature.Other').replace(/\+cmcLEY/, '');
+    const fromYard = P.ChoiceZone === 'Graveyard';
+    const options: { def: CardDef; card?: CardInst; owner: number }[] = fromYard
+      ? this.players.flatMap(pl => pl.graveyard.filter(c => matches(filter, this.subjectOf(c, pl.id), fctx)).map(c => ({ def: c.def, card: c, owner: pl.id })))
+      : this.bf.filter(x => x !== perm && matches(filter, this.subjectOf(x), fctx)).map(x => ({ def: x.baseDef ?? x.def, owner: x.owner }));
+    if (P.Choices?.includes('cmcLEY')) {
+      const y = this.lastCastX ?? 0;
+      for (let i = options.length - 1; i >= 0; i--) if (options[i].def.mv > y) options.splice(i, 1);
+    }
+    if (!options.length) return;
+    const me = this.players[controller];
+    const pick = options.reduce((a, b) => (AI.cardValue(this, me, { id: -1, def: a.def, owner: controller }) >= AI.cardValue(this, me, { id: -1, def: b.def, owner: controller }) ? a : b));
+    const d: CardDef = { ...pick.def, subtypes: [...pick.def.subtypes], keywords: [...pick.def.keywords] };
+    if (P.NewName) d.name = P.NewName;
+    for (const t of (P.AddTypes ?? '').split(/ & |,/).map(x => x.trim()).filter(Boolean)) if (!d.subtypes.includes(t)) d.subtypes.push(t);
+    if (P.AddKeywords) d.keywords.push(...P.AddKeywords.split(' & '));
+    if (P.SetPower) d.power = +P.SetPower;
+    if (P.SetToughness) d.toughness = +P.SetToughness;
+    (perm as Perm & { frontDef?: CardDef }).frontDef = perm.def;
+    perm.def = d;
+    this.trace(`${(perm as Perm & { frontDef?: CardDef }).frontDef!.name} enters as a copy of ${pick.def.name}`, controller);
+    if (fromYard && pick.card && P.RememberCloneOrigin) {
+      const pl = this.players[pick.owner];
+      pl.graveyard.splice(pl.graveyard.indexOf(pick.card), 1); pl.exile.push(pick.card);
+    }
+  }
+  lastCastX?: number;
 
   /** Put a lore counter on a Saga, run that chapter, and sacrifice it after its last chapter. */
   addLore(perm: Perm) {
@@ -1771,8 +1816,11 @@ export class Game {
       if (tc) {
         // "you may pay {2}. If you do, ..." - pay when affordable, otherwise skip the effect
         const c = parseCost(tc);
-        if (!c.supported || c.tap || c.sacSelf || !this.payMana(t.controller, c.mana.generic, c.mana.pips, true)) continue;
+        const pl = this.players[t.controller];
+        if (!c.supported || c.tap || c.sacSelf || (c.discard && pl.hand.length < c.discard)) continue;
+        if (!this.payMana(t.controller, c.mana.generic, c.mana.pips, true)) continue;
         if (c.payLife) this.loseLife(t.controller, c.payLife);
+        for (let i = 0; i < (c.discard ?? 0); i++) this.discard(pl, AI.chooseDiscard(this, pl));
       }
       const rkey = `${this.turnSeq}:${t.perm.id}:${t.perm.def.triggers.indexOf(t.trig)}`;
       const resolvedThisTurn = (this.resolvedCounts.get(rkey) ?? 0) + 1;
@@ -1872,9 +1920,38 @@ export class Game {
       }
       case 'ChangeZone': this.changeZone(eff, sub, needsTargets ? targets : defined()); break;
       case 'ChangeZoneAll': {
+        const fctx: FilterCtx = { you: ctx.p, sourceId: ctx.source?.id, remembered: ctx.remembered!.map(c => c.id) };
         if (P.Origin === 'Battlefield' && P.ChangeType) {
-          for (const x of this.bf.filter(x => matches(P.ChangeType, this.subjectOf(x), { you: ctx.p, sourceId: ctx.source?.id })))
+          for (const x of this.bf.filter(x => matches(P.ChangeType, this.subjectOf(x), fctx)))
             this.leave(x, P.Destination === 'Exile' ? 'exile' : P.Destination === 'Hand' ? 'hand' : 'graveyard');
+        } else if (/^(Graveyard|Hand|Exile)$/.test(P.Origin ?? '')) {
+          // "return all creature cards with mana value 2 or less from your graveyard to the battlefield" (Raise the Past, Bringer)
+          const zk = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile' } as const)[P.Origin as 'Graveyard'];
+          const moved: string[] = [];
+          for (const pl of this.players) {
+            const cards = pl[zk].filter(c => matches(P.ChangeType ?? 'Card', this.subjectOf(c, pl.id), fctx));
+            for (const c of cards) {
+              pl[zk].splice(pl[zk].indexOf(c), 1);
+              if (P.Destination === 'Battlefield') this.enter(c, pl.id, { tapped: P.Tapped === 'True' });
+              else if (P.Destination === 'Hand') pl.hand.push(c);
+              else if (P.Destination === 'Exile') pl.exile.push(c);
+              else if (P.Destination === 'Library') pl.library.unshift(c);
+              else pl.graveyard.push(c);
+              moved.push(c.def.name);
+            }
+          }
+          if (moved.length) this.trace(`returns ${moved.join(', ')} (${P.Origin} to ${P.Destination})`, ctx.p);
+        }
+        break;
+      }
+      case 'SacrificeAll': {
+        const fctx: FilterCtx = { you: ctx.p, sourceId: ctx.source?.id };
+        const victims = P.Defined ? defined().flatMap(t => t.kind === 'perm' ? [t.perm] : [])
+          : this.bf.filter(x => matches(P.ValidCards ?? 'Creature', this.subjectOf(x), fctx));
+        for (const x of victims) {
+          if (!this.bf.includes(x)) continue;
+          this.leave(x, 'graveyard', { sacrificed: true });
+          if (P.RememberSacrificed && !x.token) ctx.remembered!.push(this.players[x.owner].graveyard.find(c => c.id === x.id) ?? x);
         }
         break;
       }
@@ -2139,15 +2216,17 @@ export class Game {
       case 'CopyPermanent': {
         // "create a token that's a copy of target creature" (Three Steps Ahead, Adagia, Springheart Nantuko)
         const n = Math.max(1, this.amount(P.NumCopies ?? '1', sub, def));
-        for (const t of needsTargets ? targets : defined()) {
-          if (t.kind !== 'perm') continue;
-          const base = t.perm.baseDef ?? (t.perm.impending ? (t.perm as Perm & { frontDef?: CardDef }).frontDef : undefined) ?? t.perm.def;
+        const originals: CardDef[] = P.Defined === 'Remembered' ? ctx.remembered!.map(c => c.def)
+          : (needsTargets ? targets : defined()).flatMap(t => t.kind === 'perm' ? [t.perm.baseDef ?? (t.perm.impending ? (t.perm as Perm & { frontDef?: CardDef }).frontDef : undefined) ?? t.perm.def] : t.kind === 'card' ? [t.card.def] : []);
+        for (const base of originals) {
           const cd: CardDef = { ...base, supertypes: [...base.supertypes], types: [...base.types], subtypes: [...base.subtypes], keywords: [...base.keywords] };
           for (const ty of (P.AddTypes ?? '').split(/ & |,/).map(x => x.trim()).filter(Boolean)) {
             if (['Legendary', 'Snow'].includes(ty)) cd.supertypes.push(ty);
             else if (['Creature', 'Artifact', 'Enchantment', 'Land'].includes(ty)) cd.types.push(ty);
             else cd.subtypes.push(ty);
           }
+          if (P.SetCreatureTypes) cd.subtypes = P.SetCreatureTypes.split(/ & |,/).map(x => x.trim());
+          if (P.SetColor) cd.colors = P.SetColor.split(',').map(x => ({ White: 'W', Blue: 'U', Black: 'B', Red: 'R', Green: 'G' } as Record<string, Color>)[x.trim()]).filter(Boolean);
           if (P.SetPower) cd.power = +P.SetPower;
           if (P.SetToughness) cd.toughness = +P.SetToughness;
           if (P.AddKeywords) cd.keywords.push(...P.AddKeywords.split(' & '));
@@ -2321,6 +2400,7 @@ export class Game {
         const i = zone.indexOf(t.card);
         if (i < 0) continue;
         zone.splice(i, 1);
+        if (P.RememberChanged) ctx.remembered!.push(t.card);
         if (destKey === 'battlefield') this.enter(t.card, ctx.p, { tapped: P.Tapped === 'True' });
         else if (destKey === 'hand') owner.hand.push(t.card);
         else if (destKey === 'exile') owner.exile.push(t.card);

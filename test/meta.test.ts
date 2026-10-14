@@ -131,3 +131,50 @@ d('abilities granted by statics', () => {
       expect([n, loadCard(n).notes]).toEqual([n, []]);
   });
 });
+
+d('reanimator and graveyard mechanics', () => {
+  it('Delve exiles graveyard cards to pay generic mana (lands and spells before creatures)', () => {
+    const g = setup({ hand: ['Treasure Cruise'], bf: ['Island'], graveyard: ['Opt', 'Forest', 'Serra Angel', 'Opt', 'Plains', 'Opt', 'Raging Goblin'] });
+    const p = g.players[0];
+    expect(g.canCast(0, p.hand[0])).toBe(true);           // {7}{U}: 7 cards delved, Island pays {U}
+    expect(g.castSpell(0, p.hand[0])).toBe(true);
+    expect(p.exile.length).toBe(7);
+    expect(loadCard('Treasure Cruise').notes).toEqual([]);
+  });
+
+  it('Raise the Past returns creature cards with mana value 2 or less', () => {
+    const g = setup({ graveyard: ['Raging Goblin', 'Llanowar Elves', 'Serra Angel'] });
+    g.resolveEffect(loadCard('Raise the Past').spell!.effect, { p: 0, x: 0, kicked: false, targets: [] });
+    expect(g.bf.filter(x => x.controller === 0).map(x => x.def.name).sort()).toEqual(['Llanowar Elves', 'Raging Goblin']);
+    expect(g.players[0].graveyard.map(c => c.def.name)).toEqual(['Serra Angel']);
+  });
+
+  it('Bringer of the Last Gift: everyone sacrifices, then returns what was already in the graveyard', () => {
+    const g = setup({ bf: ['Raging Goblin'], graveyard: ['Serra Angel'] }, { bf: ['Llanowar Elves'], graveyard: ['Healer\'s Hawk'] });
+    g.enter(make(g, 0, 'Bringer of the Last Gift'), 0);
+    const names = (pid: number) => g.bf.filter(x => x.controller === pid).map(x => x.def.name).sort();
+    expect(names(0)).toEqual(['Bringer of the Last Gift', 'Serra Angel']);
+    expect(names(1)).toEqual(["Healer's Hawk"]);
+    expect(g.players[0].graveyard.map(c => c.def.name)).toEqual(['Raging Goblin']);
+  });
+
+  it('Superior Spider-Man enters as a 4/4 copy of the best creature card in a graveyard and exiles it', () => {
+    const g = setup({ graveyard: ['Raging Goblin'] }, { graveyard: ['Serra Angel'] });
+    const sm = g.enter(make(g, 0, 'Superior Spider-Man'), 0);
+    expect(sm.def.name).toBe('Superior Spider-Man');
+    expect(sm.def.keywords).toContain('Flying');
+    expect(g.statsOf(sm)).toMatchObject({ power: 4, toughness: 4 });
+    expect(g.players[1].exile.map(c => c.def.name)).toEqual(['Serra Angel']);
+    g.destroy(sm);
+    expect(g.players[0].graveyard.map(c => c.def.name)).toContain('Superior Spider-Man');
+  });
+
+  it('Dark Ritual is cast only when it enables a spell', () => {
+    const g = setup({ hand: ['Dark Ritual', 'Serra Angel'], bf: ['Swamp', 'Plains'] });
+    AI.mainPhase(g, g.players[0], 1);
+    expect(log(g)).not.toMatch(/Dark Ritual/);
+    const g2 = setup({ hand: ['Dark Ritual', 'Sheoldred, the Apocalypse'], bf: ['Swamp', 'Swamp'] });
+    AI.mainPhase(g2, g2.players[0], 1);
+    expect(log(g2)).toMatch(/casts Dark Ritual[\s\S]*casts Sheoldred/);
+  });
+});
