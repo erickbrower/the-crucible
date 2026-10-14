@@ -705,6 +705,23 @@ function warpActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'):
 }
 
 /**
+ * Impending (the Overlords): when the full cost is out of reach, cast it for the impending cost for the
+ * enters trigger now; it becomes a creature a few turns later.
+ */
+function impendingActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
+  if (window === 'instant') return [];
+  const acts: Action[] = [];
+  for (const c of p.hand) {
+    const ic = g.impendingCost(c.def);
+    if (!ic || g.canCast(p.id, c) || !g.canCast(p.id, c, { altCost: ic.cost })) continue;
+    const etb = c.def.triggers.some(t => t.mode === 'ChangesZone' && t.params.Destination === 'Battlefield' && /Self/.test(t.params.ValidCard ?? ''));
+    const score = 3 + (etb ? 2 : 0) + (c.def.power ?? 0) * 0.2;
+    acts.push({ score, label: `impending ${c.def.name}`, run: () => g.castSpell(p.id, c, { impending: true }) });
+  }
+  return acts;
+}
+
+/**
  * Station (sorcery speed, so after combat): tap creatures that didn't attack to charge a Spacecraft
  * or Planet, when we're not under pressure or it finishes the job this turn.
  */
@@ -769,6 +786,7 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       if (plan) acts.push(castAction(g, p, m.card, false, { ...plan, fromExile: true }));
     }
     acts.push(...warpActions(g, p, window));
+    acts.push(...impendingActions(g, p, window));
     acts.push(...stationActions(g, p, window));
     acts.push(...abilityActions(g, p, window));
     acts.push(...cycleActions(g, p));

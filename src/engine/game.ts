@@ -185,6 +185,7 @@ export class Game {
     this.phase = 'end';
     this.emit({ type: 'phase', phase: 'End of Turn', player: this.active });
     this.exileWarped();
+    this.tickImpending();
     // opponent's end-of-turn window (flash creatures, instant removal, draw)
     AI.endOfTurnWindow(this, this.players[this.opp(this.active)]);
     this.cleanup();
@@ -552,6 +553,29 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ mana
+  private grantedCache = new Map<string, Ability>();
+  /** Mana abilities other permanents give this one ("Creatures you control have '{T}: Add {R}, {G}, or {W}.'"). */
+  grantedManaAbilities(perm: Perm): Ability[] {
+    const out: Ability[] = [];
+    for (const src of this.bf) for (const st of src.def.statics) {
+      if (st.mode !== 'Continuous' || !st.params.AddAbility) continue;
+      for (const name of st.params.AddAbility.split(' & ')) {
+        const text = src.def.svars[name];
+        if (!text || !/^AB\$ Mana\b/.test(text)) continue;
+        if (!this.staticApplies(src, st.params, perm) || !this.staticConditionMet(src, st.params)) continue;
+        const key = `${src.def.name}|${name}`;
+        let ab = this.grantedCache.get(key);
+        if (!ab) {
+          const params = parseParams(text);
+          ab = { kind: 'mana', effect: { api: 'Mana', params }, cost: parseCost(params.Cost), description: params.SpellDescription };
+          this.grantedCache.set(key, ab);
+        }
+        out.push(ab);
+      }
+    }
+    return out;
+  }
+
   manaUnits(pid: number, convoke = false): ManaUnit[] {
     const units: ManaUnit[] = [];
     let g = 0;
@@ -573,10 +597,15 @@ export class Game {
           }
         }
         if (d.abilities.some(a => (a.effect.params.Produced ?? '').includes('ColorIdentity'))) colors = p.identity;
+        for (const a of this.grantedManaAbilities(perm)) {   // "lands you control have '{T}: Add one mana of any color'"
+          const prod = a.effect.params.Produced ?? '';
+          const extra = prod === 'Any' ? COLORS : prod.replace('Combo', '').split(/\s+/).filter(ch => (COLORS as string[]).includes(ch)) as Color[];
+          colors = [...new Set([...colors, ...extra])];
+        }
         units.push({ group: g++, perm, colors, land: true, treasure: false, any: false });
         continue;
       }
-      const ma = d.abilities.find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0
+      const ma = [...d.abilities, ...this.grantedManaAbilities(perm)].find(a => a.kind === 'mana' && a.cost.supported && (a.cost.tap || a.cost.sacSelf) && a.cost.mana.generic === 0 && a.cost.mana.pips.length === 0
         && (a.condition !== 'MaxSpeed' || (p.speed ?? 0) >= 4));
       if (!ma) continue;
       const prod = ma.effect.params.Produced ?? 'C';
@@ -835,6 +864,7 @@ export class Game {
     if (P.Power !== undefined) d.power = num(P.Power);
     if (P.Toughness !== undefined) d.toughness = num(P.Toughness);
     if (P.Keywords) d.keywords = [...d.keywords, ...P.Keywords.split(' & ').map(k => k.trim())];
+    if (P.staticAbilities) d.statics = [...d.statics, ...P.staticAbilities.split(',').map(n => parseParams(d.svars[n.trim()] ?? '')).filter(x => x.Mode).map(x => ({ mode: x.Mode, params: x }))];
     if (P.Colors) {
       const cols = P.Colors.split(',').map(c => COLOR_NAMES[c.trim()]).filter(Boolean);
       d.colors = P.OverwriteColors ? cols : [...new Set([...d.colors, ...cols])];
@@ -864,6 +894,26 @@ export class Game {
   freeToCast(pid: number, c: CardInst): boolean {
     return c.def.statics.some(s => s.mode === 'AlternativeCost' && s.params.Cost === '0' && /^Spell/.test(s.params.ValidSA ?? '')
       && (s.params.ValidCard ?? 'Card.Self') === 'Card.Self' && this.staticConditionMet(c, s.params, pid));
+  }
+
+  /** "Impending N—{cost}": the alternative cost and the number of time counters. */
+  impendingCost(d: CardDef): { n: number; cost: string } | undefined {
+    const k = d.keywords.find(x => x.startsWith('Impending:'));
+    if (!k) return undefined;
+    const [, n, cost] = k.split(':');
+    return { n: parseInt(n, 10) || 1, cost };
+  }
+
+  /** At the beginning of your end step, remove a time counter from each impending permanent; at zero it's a creature. */
+  tickImpending() {
+    for (const perm of this.bf.filter(x => x.controller === this.active && x.impending)) {
+      perm.counters.TIME = Math.max(0, (perm.counters.TIME ?? 1) - 1);
+      if (perm.counters.TIME > 0) continue;
+      const front = (perm as Perm & { frontDef?: CardDef }).frontDef;
+      if (front) { perm.def = front; (perm as Perm & { frontDef?: CardDef }).frontDef = undefined; }
+      perm.impending = false;
+      this.trace(`${perm.def.name} loses its last time counter and is a creature`, perm.controller);
+    }
   }
 
   /** Warp: at the beginning of the end step, exile warped permanents; they can be cast from exile on a later turn. */
@@ -941,8 +991,9 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ casting
-  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean; warp?: boolean; fromExile?: boolean } = {}): boolean {
+  castSpell(pid: number, c: CardInst, opts: { kicked?: boolean; x?: number; fromCommand?: boolean; sacForAlt?: Perm; altCost?: string; sneak?: boolean; flashback?: boolean; warp?: boolean; fromExile?: boolean; impending?: boolean } = {}): boolean {
     const p = this.players[pid];
+    if (opts.impending) { const ic = this.impendingCost(c.def); if (!ic || !p.hand.includes(c)) return false; opts = { ...opts, altCost: ic.cost }; }
     if (opts.flashback) { opts = { ...opts, altCost: this.keywordCost(c, 'Flashback') }; if (opts.altCost === undefined || !p.graveyard.includes(c)) return false; }
     if (opts.warp) { opts = { ...opts, altCost: this.keywordCost(c, 'Warp') }; if (opts.altCost === undefined || !p.hand.includes(c)) return false; }
     if (opts.fromExile) {
@@ -970,12 +1021,12 @@ export class Game {
     else if (opts.fromExile) { this.takeFromExile(c); p.warpExile = (p.warpExile ?? []).filter(w => w.card !== c); p.mayPlay = (p.mayPlay ?? []).filter(m => m.card !== c); }
     else p.hand.splice(p.hand.indexOf(c), 1);
     p.spellsThisTurn++; this.stats.cast[pid]++; this.cardsCast[pid].add(c.def.name);
-    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, modes,
+    const item: StackItem = { card: c, controller: pid, x: opts.x ?? 0, kicked: !!opts.kicked, fromCommand: opts.fromCommand, sneak: opts.sneak, flashback: opts.flashback, warp: opts.warp, impending: opts.impending, modes,
       gift: c.def.keywords.includes('Gift') && AI.promiseGift(this, pid, c) };
     const isCreature = c.def.types.includes('Creature');
     if (!isCreature) p.noncreatureSpellsThisTurn++;
     const under = this.stack[this.stack.length - 1];
-    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${opts.fromExile ? ' from exile' : ''}${item.gift ? ' (gift promised)' : ''}${modes ? ` (spree: ${modes.length} mode${modes.length > 1 ? 's' : ''})` : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
+    this.trace(`casts ${c.def.name}${item.x ? ` X=${item.x}` : ''}${item.kicked ? ' (kicked)' : ''}${item.sneak ? ' (sneak)' : ''}${item.flashback ? ' (flashback)' : ''}${item.warp ? ' (warp)' : ''}${item.impending ? ' (impending)' : ''}${opts.fromExile ? ' from exile' : ''}${item.gift ? ' (gift promised)' : ''}${modes ? ` (spree: ${modes.length} mode${modes.length > 1 ? 's' : ''})` : ''}${under ? ` in response to ${under.card.def.name}` : ''}`, pid);
     // modes and targets are chosen now and stay locked in until the spell resolves
     if (c.def.spell && !this.isPermanentSpell(c.def)) item.plan = this.lockTargets(c.def.spell.effect, { p: pid, card: c, x: item.x, kicked: item.kicked, targets: [], spell: item });
     AI.resetHints();
@@ -1094,7 +1145,7 @@ export class Game {
       this.resolveEffect(compileGift(c.def), { p: pid, card: c, x: 0, kicked: false, targets: [], spell: item });
     }
     if (c.def.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t)) && !c.def.types.includes('Instant')) {
-      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {}, { giftPromised: item.gift });
+      const perm = this.enter(c, pid, item.sneak && this.phase === 'combat' ? { tapped: true, attacking: true } : {}, { giftPromised: item.gift, impending: item.impending });
       if (item.warp) perm.warped = true;
       if (item.kicked && c.def.offspring) {
         // Offspring: a 1/1 token copy
@@ -1126,6 +1177,12 @@ export class Game {
       attacking: opts.attacking, ...extra,
     };
     if (c.def.loyalty !== undefined) perm.counters.LOYALTY = c.def.loyalty;
+    if (perm.impending) {
+      // impending N: enters with N time counters and isn't a creature until the last one is removed
+      perm.counters.TIME = this.impendingCost(c.def)?.n ?? 1;
+      (perm as Perm & { frontDef?: CardDef }).frontDef = c.def;
+      perm.def = { ...c.def, types: c.def.types.filter(t => t !== 'Creature') };
+    }
     for (const k of c.def.keywords) {
       const m = k.match(/^etbCounter:(\w+):(\d+)/);
       if (m) perm.counters[m[1]] = (perm.counters[m[1]] ?? 0) + +m[2];
@@ -1179,7 +1236,10 @@ export class Game {
     for (const ex of perm.exiledUntilLeaves) {
       const pl = this.players[ex.owner];
       const k = pl.exile.indexOf(ex);
-      if (k >= 0) { pl.exile.splice(k, 1); this.enter(ex, ex.owner, {}); }
+      if (k < 0) continue;
+      pl.exile.splice(k, 1);
+      if (this.returnsToHand.delete(ex)) { pl.hand.push(ex); this.trace(`${ex.def.name} returns to P${ex.owner}'s hand`, ex.owner); }
+      else this.enter(ex, ex.owner, {});
     }
     if (!perm.token) {
       const card: CardInst = { id: perm.id, def: perm.transformed && perm.def.name !== perm.def.name ? perm.def : this.originalDef(perm), owner: perm.owner, isCommander: perm.isCommander };
@@ -1354,6 +1414,8 @@ export class Game {
 
   private triggerCounts = new Map<string, number>();
   private resolvedCounts = new Map<string, number>();
+  /** Cards exiled from a hand "until this leaves the battlefield": they go back to the hand, not the battlefield. */
+  private returnsToHand = new WeakSet<CardInst>();
   damageBatch = 0;                 // combat damage step (or one noncombat damage event): "one or more ... deal damage" triggers once per batch
   private inCombatDamage = false;
   private onceFired = new Set<string>();
@@ -1485,7 +1547,41 @@ export class Game {
   private subjectOfSnapshot(perm: Perm): Subject {
     if (this.bf.includes(perm)) return this.subjectOf(perm);
     return { kind: 'card', def: perm.def, controller: perm.controller ?? perm.owner, owner: perm.owner, token: perm.token, id: perm.id,
-      power: perm.def.power, toughness: perm.def.toughness, keywords: perm.def.keywords };
+      power: perm.def.power, toughness: perm.def.toughness, keywords: perm.def.keywords, tapped: perm.tapped, attacking: perm.attacking,
+      blocking: perm.blocking, counters: perm.counters, isCommander: perm.isCommander };
+  }
+
+  /** "If ..." conditions on an effect: ConditionPresent / ConditionNotPresent, over defined objects or a zone. */
+  conditionPresentMet(P: Record<string, string>, ctx: Ctx): boolean {
+    const filter = P.ConditionPresent ?? P.ConditionNotPresent ?? 'Card';
+    const fctx: FilterCtx = { you: ctx.p, sourceId: ctx.source?.id, sourceAttachedTo: ctx.source?.attachedTo };
+    let n = 0;
+    if (P.ConditionDefined) {
+      const subjects: Subject[] = [];
+      const spec = P.ConditionDefined;
+      if (/^(Targeted|ParentTarget|TargetedCard)$/.test(spec)) for (const t of ctx.targets) {
+        if (t.kind === 'perm') subjects.push(this.subjectOfSnapshot(t.perm));
+        else if (t.kind === 'card') subjects.push(this.subjectOf(t.card, t.card.owner));
+        else if (t.kind === 'spell') subjects.push(this.subjectOf(t.item.card, t.item.controller));
+      }
+      else if (spec === 'Remembered') for (const c of ctx.remembered ?? []) subjects.push(this.subjectOf(c, c.owner));
+      else if (spec === 'Self' && ctx.source) subjects.push(this.subjectOfSnapshot(ctx.source));
+      else for (const t of this.defined(spec, ctx)) if (t.kind === 'perm') subjects.push(this.subjectOf(t.perm));
+      n = subjects.filter(x => matches(filter, x, fctx)).length;
+    } else {
+      for (const zone of (P.ConditionZone ?? 'Battlefield').split(',')) {
+        if (zone === 'Battlefield') n += this.bf.filter(x => matches(filter, this.subjectOf(x), fctx)).length;
+        else {
+          const key = ({ Graveyard: 'graveyard', Hand: 'hand', Exile: 'exile', Library: 'library' } as Record<string, 'graveyard' | 'hand' | 'exile' | 'library'>)[zone];
+          if (key) for (const pl of this.players) n += pl[key].filter(c => matches(filter, this.subjectOf(c, pl.id), fctx)).length;
+        }
+      }
+    }
+    if (P.ConditionNotPresent && !P.ConditionPresent) return n === 0;
+    const m = (P.ConditionCompare ?? 'GE1').match(/^(LE|GE|LT|GT|EQ|NE)(.+)$/);
+    if (!m) return n > 0;
+    const rhs = /^-?\d+$/.test(m[2]) ? +m[2] : this.amount(m[2], ctx);
+    return { LE: n <= rhs, GE: n >= rhs, LT: n < rhs, GT: n > rhs, EQ: n === rhs, NE: n !== rhs }[m[1] as 'LE'];
   }
 
   resolveTriggers() {
@@ -1553,6 +1649,10 @@ export class Game {
       const promised = !!(ctx.spell?.gift ?? ctx.source?.giftPromised);
       const want = (P.ConditionCompare ?? 'EQ1') !== 'EQ0';
       if (promised !== want) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
+    }
+    if ((P.ConditionPresent || P.ConditionNotPresent) && !P.ConditionPresent?.includes('PromisedGift') && !this.conditionPresentMet(P, ctx)) {
+      if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1);
+      return;
     }
     if (P.OptionalDecider && !AI.optionalYes(this, eff, ctx)) { if (eff.sub) this.resolveEffect(eff.sub, ctx, depth + 1); return; }
     let targets: Target[] = [];
@@ -1627,6 +1727,7 @@ export class Game {
             else if (t.pid !== ctx.p && (P.Mode === 'RevealYouChoose' || P.Mode === 'TgtChoose')) c = AI.bestCardInHand(this, pl);
             else c = AI.chooseDiscard(this, pl);
             this.discard(pl, c);
+            if (P.RememberDiscarded) ctx.remembered!.push(c);
           }
         }
         break;
@@ -1833,6 +1934,7 @@ export class Game {
         this.trace(`earthbends ${land.def.name} (+${n})`, ctx.p);
         break;
       }
+      case 'RevealHand': break;   // the AI already plays with open information; the next step makes the choice
       case 'Cleanup': {
         if (P.ClearRemembered) ctx.remembered!.length = 0;
         if (P.ClearChosenCard) ctx.chosen!.length = 0;
@@ -1997,6 +2099,26 @@ export class Game {
         else if (destKey === 'hand') owner.hand.push(t.card);
         else if (destKey === 'exile') owner.exile.push(t.card);
         else owner.library.unshift(t.card);
+      }
+      if (!tg.length && origin === 'Hand' && P.DefinedPlayer && destKey !== 'battlefield') {
+        // "look at target opponent's hand, exile a nonland card from it" (Deep-Cavern Bat, Kitesail Freebooter)
+        const who = this.defined(P.DefinedPlayer, ctx).flatMap(t => t.kind === 'player' ? [this.players[t.pid]] : []);
+        const n = P.ChangeNum ? Math.max(1, this.amount(P.ChangeNum, ctx)) : 1;
+        for (const victim of who) for (let i = 0; i < n; i++) {
+          const opts = victim.hand.filter(c => matches(P.ChangeType ?? 'Card', this.subjectOf(c, victim.id), { you: ctx.p }));
+          if (!opts.length) break;
+          // an opponent's hand: take their best card; our own: the one we miss least
+          const c = victim.id !== ctx.p ? opts.reduce((a, b) => AI.cardValue(this, victim, a) >= AI.cardValue(this, victim, b) ? a : b)
+            : opts.reduce((a, b) => AI.cardValue(this, victim, a) <= AI.cardValue(this, victim, b) ? a : b);
+          victim.hand.splice(victim.hand.indexOf(c), 1);
+          if (destKey === 'exile') victim.exile.push(c); else if (destKey === 'graveyard') victim.graveyard.push(c); else if (destKey === 'hand') victim.hand.push(c); else victim.library.unshift(c);
+          if (P.RememberChanged) ctx.remembered!.push(c);
+          this.trace(`exiles ${c.def.name} from P${victim.id}'s hand${P.Duration === 'UntilHostLeavesPlay' ? ` until ${ctx.source?.def.name} leaves` : ''}`, ctx.p);
+          if (destKey === 'exile' && P.Duration === 'UntilHostLeavesPlay' && ctx.source && this.bf.includes(ctx.source)) {
+            ctx.source.exiledUntilLeaves.push(c); this.returnsToHand.add(c);
+          }
+        }
+        return;
       }
       if (!tg.length && origin.includes('Hand') && destKey === 'battlefield') {
         const type = P.ChangeType ?? 'Permanent';

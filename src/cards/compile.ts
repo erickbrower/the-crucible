@@ -13,7 +13,7 @@ export const SUPPORTED_APIS = new Set([
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
-  'AddPhase', 'MultiplyCounter',
+  'AddPhase', 'MultiplyCounter', 'RevealHand',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
@@ -24,7 +24,7 @@ export const SUPPORTED_TRIGGERS = new Set([
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
-  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize',
+  'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -105,7 +105,8 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   else if (IGNORED_APIS.has(api)) notes.push(`ignored effect "${api}"`);
   else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
-  else if (api === 'Animate' && (params.Triggers || params.Abilities || params.staticAbilities || params.HiddenKeywords)) notes.push('animate: granted abilities ignored');
+  else if (api === 'Animate' && (params.Triggers || params.Abilities || params.HiddenKeywords
+    || (params.staticAbilities && !params.staticAbilities.split(',').every(n => continuousSupported(face.svars, parseParams(face.svars[n.trim()] ?? '')))))) notes.push('animate: granted abilities ignored');
   else if (api === 'AddPhase' && !/Combat/.test(params.ExtraPhase ?? '')) notes.push(`extra phase "${params.ExtraPhase}" ignored`);
   void SILENT_APIS;
   if (api === 'Charm' && params.Choices && depth < 6) {
@@ -116,11 +117,18 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
     const sv = face.svars[params.SubAbility];
     if (sv) eff.sub = compileEffect(face, sv, notes, depth + 1);
   }
-  // ConditionCheckSVar is evaluated by the engine; the others are not
-  if (params.Conditions || params.ConditionPresent || params.ConditionDefined) {
-    if (!params.ETB) notes.push(`condition on ${api} ignored`);
-  }
+  // ConditionCheckSVar and ConditionPresent/NotPresent (over a zone or defined objects) are evaluated by the engine
+  const DEFINED_OK = /^(Targeted|ParentTarget|TargetedCard|Remembered|Self|TriggeredCard|TriggeredCardLKICopy|TriggeredTarget|Enchanted|Equipped|Valid .+)$/;
+  if ((params.Conditions || (params.ConditionDefined && !DEFINED_OK.test(params.ConditionDefined))) && !params.ETB) notes.push(`condition on ${api} ignored`);
   return eff;
+}
+
+/** A continuous static whose every change the engine applies: pumps, keywords, and granted mana abilities. */
+export function continuousSupported(svars: Record<string, string>, st: Record<string, string>): boolean {
+  if (st.Mode !== 'Continuous') return false;
+  const changes = Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k));
+  return changes.length > 0 && changes.every(k => ['AddPower', 'AddToughness', 'AddKeyword'].includes(k)
+    || (k === 'AddAbility' && st.AddAbility.split(' & ').every(n => /^AB\$ Mana\b/.test(svars[n] ?? ''))));
 }
 
 /** Temporary statics the engine applies: pumps, keywords, "can't block/attack", "can't be blocked". */
@@ -270,6 +278,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     const m = params.Mode;
     if (m === 'Continuous') {
       if (params.CharacteristicDefining && !params.AddType && !params.AddAbility && !params.AddTrigger && !params.RemoveAllAbilities) { /* computed by the engine */ }
+      else if (continuousSupported(face.svars, params)) { /* pumps, keywords, granted mana abilities */ }
       else if (params.SetPower || params.SetToughness || params.AddType || params.RemoveAllAbilities || params.AddAbility || params.AddTrigger)
         notes.push('static: some layer effects ignored');
     } else if (m === 'AlternativeCost' && /^Spell/.test(params.ValidSA ?? '') && (params.ValidCard ?? 'Card.Self') === 'Card.Self'
