@@ -185,3 +185,27 @@ d('self cost reduction', () => {
     expect(g.spellCost(0, g.players[0].hand[0]).generic).toBe(10 - 5);
   });
 });
+
+d('land-played triggers and activation locks', () => {
+  it('Shadow of the Goblin does not ping for a land played from our own hand', () => {
+    const g = setup({ hand: ['Forest'], bf: ['Shadow of the Goblin'] });
+    g.playLand(g.players[0], g.players[0].hand[0], true);
+    expect(g.players[1].life).toBe(20);
+    expect(loadCard('Shadow of the Goblin').notes).toEqual([]);
+  });
+
+  it('Burgeoning: whenever an opponent plays a land, put a land from hand onto the battlefield', () => {
+    const g = setup({ hand: ['Forest'] }, { hand: ['Plains'], bf: ['Burgeoning'] });
+    g.players[1].hand.push(make(g, 1, 'Forest'));
+    g.playLand(g.players[0], g.players[0].hand[0], true);
+    expect(g.bf.filter(x => x.controller === 1 && x.def.types.includes('Land')).length).toBe(1);
+  });
+
+  it("Disruptor Flute stops the named card's non-mana activated abilities", () => {
+    const g = setup({ bf: ['Restless Anchorage', 'Plains', 'Island', 'Island'] }, {});
+    const flute = g.enter(make(g, 1, 'Disruptor Flute'), 1);
+    flute.namedCard = 'Restless Anchorage';
+    expect(g.cantActivate(perm(g, 0, 'Restless Anchorage'), false)).toBe(true);
+    expect(g.cantActivate(perm(g, 0, 'Restless Anchorage'), true)).toBe(false);
+  });
+});

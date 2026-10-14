@@ -637,7 +637,7 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
   const granting = g.bf.some(x => x.def.statics.some(st => st.params.AddAbility));
   for (const perm of g.bf.filter(x => x.controller === p.id)) {
     [...perm.def.abilities, ...(granting ? g.grantedAbilities(perm).filter(a => a.kind === 'activated') : [])].forEach((ab, idx) => {
-      if (ab.kind !== 'activated') return;
+      if (ab.kind !== 'activated' || g.cantActivate(perm, false)) return;
       if (window === 'instant' && (ab.sorcerySpeed || ab.planeswalker)) return;
       const key = `${g.turn}:${g.active}:${g.phase}:${perm.id}:${idx}`;
       if (activatedThisWindow.has(key)) return;
@@ -933,7 +933,7 @@ export function crewVehicles(g: Game, p: Player) {
  * mana can be paid without tapping the permanent itself and no untapped opposing creature can block it and kill it.
  */
 export function animateForAttack(g: Game, p: Player) {
-  for (const perm of g.bf.filter(x => x.controller === p.id && !x.tapped && !x.sick && !isCreature(x))) {
+  for (const perm of g.bf.filter(x => x.controller === p.id && !x.tapped && !x.sick && !isCreature(x) && !g.cantActivate(x, false))) {
     const ab = perm.def.abilities.find(a => a.effect.api === 'Animate' && a.effect.params.Defined === 'Self' && !a.effect.params.Duration
       && a.cost.supported && !a.cost.tap && !a.cost.sac && !a.cost.loyalty && !a.cost.discard && !a.cost.mana.x);
     if (!ab) continue;

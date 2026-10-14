@@ -640,6 +640,13 @@ export class Game {
     return out;
   }
 
+  /** "Activated abilities of sources with the chosen name can't be activated unless they're mana abilities." */
+  cantActivate(perm: Perm, mana: boolean): boolean {
+    return this.bf.some(src => src.def.statics.some(st => st.mode === 'CantBeActivated'
+      && (!mana || !/!ManaAbility/.test(st.params.ValidSA ?? ''))
+      && matches(st.params.ValidCard ?? 'Card', this.subjectOf(perm), this.ctxFor(src))));
+  }
+
   /** Mana abilities other permanents give this one ("Creatures you control have '{T}: Add {R}, {G}, or {W}.'"). */
   grantedManaAbilities(perm: Perm): Ability[] {
     const out: Ability[] = [];
@@ -1108,6 +1115,7 @@ export class Game {
       perm.chosenType = ({ W: 'Plains', U: 'Island', B: 'Swamp', R: 'Mountain', G: 'Forest' } as Record<Color, string>)[need];
     }
     this.trace(`plays ${c.def.name}${tapped ? ' (tapped)' : ''}`);
+    this.emit({ type: 'landPlayed', player: p.id, perm });
     // fetch lands crack immediately
     if (land.fetchBasic) {
       const ab = c.def.abilities.find(a => a.effect.api === 'ChangeZone' && a.cost.sacSelf)!;
@@ -1734,6 +1742,11 @@ export class Game {
         if (P.ValidActivatingPlayer === 'You' && ev.player !== controller) return false;
         return !P.ValidCard || matches(P.ValidCard, this.subjectOf(ev.card, ev.player), ctx);
       }
+      case 'LandPlayed': {
+        if (ev.type !== 'landPlayed' || !onBf) return false;
+        if (P.Origin && !P.Origin.split(',').includes('Hand')) return false;   // only lands played from hand are modeled
+        return !P.ValidCard || matches(P.ValidCard, this.subjectOf(ev.perm), ctx);
+      }
       case 'Scry': case 'Surveil': {
         if (ev.type !== 'scry' || !onBf || ev.surveil !== (trig.mode === 'Surveil')) return false;
         if (P.ValidPlayer === 'You' && ev.player !== controller) return false;
@@ -1823,6 +1836,7 @@ export class Game {
       if (ev.type === 'lifeGained') { triggered.player = ev.player; triggered.amount = ev.amount; }
       if (ev.type === 'drawn' || ev.type === 'phase' || ev.type === 'discard' || ev.type === 'scry') triggered.player = ev.player;
       if (ev.type === 'cycled') { triggered.perm = ev.card; triggered.player = ev.player; }
+      if (ev.type === 'landPlayed') { triggered.perm = ev.perm; triggered.player = ev.player; }
       const src = this.bf.includes(t.perm as Perm) ? (t.perm as Perm) : undefined;
       const tc = t.trig.effect.params.Cost;
       if (tc) {
@@ -2581,6 +2595,7 @@ export type GEvent =
   | { type: 'discard'; player: number; card: CardInst }
   | { type: 'sacrificed'; perm: Perm }
   | { type: 'cycled'; player: number; card: CardInst }
-  | { type: 'scry'; player: number; surveil: boolean };
+  | { type: 'scry'; player: number; surveil: boolean }
+  | { type: 'landPlayed'; player: number; perm: Perm };
 
 export type { Ability };

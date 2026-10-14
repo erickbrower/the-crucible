@@ -82,7 +82,7 @@ function matchPropInner(prop: string, s: Subject, ctx: FilterCtx): boolean {
     case 'YouCtrl': return s.controller === ctx.you;
     case 'OppCtrl': return s.controller !== ctx.you;
     case 'YouOwn': return (s.owner ?? s.controller) === ctx.you;
-    case 'OppOwn': return (s.owner ?? s.controller) !== ctx.you;
+    case 'OppOwn': case 'YouDontOwn': return (s.owner ?? s.controller) !== ctx.you;
     case 'Self': return s.id !== undefined && s.id === ctx.sourceId;
     case 'Other': case 'StrictlyOther': return s.id === undefined || s.id !== ctx.sourceId;
     case 'IsRemembered': return s.id !== undefined && !!ctx.remembered?.includes(s.id);

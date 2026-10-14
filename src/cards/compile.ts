@@ -20,7 +20,7 @@ const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
 // ChooseType and NameCard run when they're part of an ETBReplacement; RaiseCost statics with a numeric amount are applied
 export const SUPPORTED_TRIGGERS = new Set([
   'ChangesZone', 'SpellCast', 'Attacks', 'DamageDone', 'DamageDoneOnce', 'Phase', 'LifeGained', 'AttackersDeclared',
-  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled', 'Scry', 'Surveil',
+  'ChangesZoneAll', 'Drawn', 'Sacrificed', 'Blocks', 'CounterAddedOnce', 'Exploited', 'Cycled', 'Scry', 'Surveil', 'LandPlayed',
 ]);
 const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
@@ -156,6 +156,7 @@ export function effectGaps(face: { svars: Record<string, string> }, params: Reco
     if (st.Mode === 'Continuous' && st.MayPlay) {
       if (!/IsRemembered/.test(st.Affected ?? '') || (st.AffectedZone && st.AffectedZone !== 'Exile')) out.push(`effect: may play "${st.Affected}" ignored`);
       if (!/Remembered|Targeted|ChosenCard|TriggeredCard/.test(params.RememberObjects ?? '')) out.push('effect: may play without remembered cards ignored');
+    } else if (st.Mode === 'CantPreventDamage') { /* nothing prevents damage in the engine anyway */
     } else if (!tempStaticSupported(st)) out.push(`effect static "${st.Mode}${st.Mode === 'Continuous' ? ' ' + Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k)).join('+') : ''}" ignored`);
   }
   for (const t of list('Triggers')) out.push(`effect trigger "${t.Mode}" ignored`);
@@ -298,7 +299,9 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       // free spells ("if you control a commander") and pitch costs (life, exile from hand, return a land, sacrifice)
     } else if (m === 'RaiseCost' && !params.ValidTarget && !params.Cost && /Spell/.test(params.Type ?? 'Spell')) {
       // "spells cost {N} more" (Thalia, Disruptor Flute)
-    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker'].includes(m)) {
+    } else if (m === 'CantBeActivated' && /!ManaAbility/.test(params.ValidSA ?? '')) {
+      // "can't be activated unless they're mana abilities"
+    } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker', 'CantPreventDamage'].includes(m)) {
       notes.push(`static "${m}" ignored`);
     }
   }
