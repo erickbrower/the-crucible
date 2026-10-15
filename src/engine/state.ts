@@ -31,12 +31,15 @@ export interface Perm extends CardInst {
   chosenType?: string;
   namedCard?: string;       // "as this enters, choose a card name"
   noUntap?: boolean;
-  earthbent?: boolean;
-  baseDef?: CardDef;
-  warped?: boolean;
+  earthbent?: boolean;      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  baseDef?: CardDef;        // printed characteristics while temporarily animated (a crewed Vehicle)
+  warped?: boolean;         // cast for its warp cost: exiled at the next end step
   giftPromised?: boolean;   // cast with its gift promised
   attacksThisTurn?: number; // times it attacked this turn ("attacks for the first time each turn")
-  impending?: boolean;      // cast for its impending cost: not a creature until its last time counter is removed         // cast for its warp cost: exiled at the next end step        // printed characteristics while temporarily animated (a crewed Vehicle)      // a land turned into a creature by earthbend: returns to play tapped when it dies
+  impending?: boolean;      // cast for its impending cost: not a creature until its last time counter is removed
+  attrs?: string[];         // Suspected, Solved, Saddled, Prepared (Forge AlterAttribute)
+  escaped?: boolean;        // cast with escape
+  bestowed?: boolean;       // an Aura cast with bestow: becomes a creature again if its host leaves
 }
 
 export interface DeckList {
@@ -69,6 +72,9 @@ export interface Player {
   speedTurn?: number;       // turn the speed last increased
   warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn
   mayPlay?: { card: CardInst; untilSeq: number; free?: boolean }[];   // exiled cards this player may play (impulse draw) until turn #untilSeq ends
+  plotted?: { card: CardInst; seq: number }[];   // plotted cards in exile: cast free on a later turn
+  discardedThisTurn?: CardInst[];   // for mayhem ("if you discarded it this turn")
+  protectedUntilSeq?: number;       // "you gain protection from everything until your next turn" (The One Ring)
   pool?: (Color | 'C')[];   // floating mana (firebending), emptied at end of combat and cleanup
   style: 'aggro' | 'midrange' | 'control';
 }

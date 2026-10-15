@@ -14,6 +14,7 @@ export const SUPPORTED_APIS = new Set([
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
   'AddPhase', 'MultiplyCounter', 'RevealHand', 'NameCard', 'CopyPermanent', 'DelayedTrigger', 'SacrificeAll',
+  'Blight', 'Proliferate', 'AlterAttribute', 'Protection',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
@@ -26,6 +27,7 @@ export const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
   'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending', 'MayEffectFromOpeningHand', 'Evoke', 'Delve',
+  'Escape', 'Mayhem', 'Bargain', 'Saddle', 'Tiered', 'Plot', 'Bestow', 'Craft',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -58,6 +60,8 @@ export function parseCost(s: string | undefined): Cost {
     else if (/^Sac<(\d+)\/([^/>]+)/.test(tok)) { const m = tok.match(/^Sac<(\d+)\/([^/>]+)/)!; cost.sac = { n: +m[1], filter: m[2] }; }
     else if (/^Discard<(\d+)/.test(tok)) cost.discard = +tok.match(/^Discard<(\d+)/)![1];
     else if (/^PayLife<(\d+)>/.test(tok)) cost.payLife = +tok.match(/^PayLife<(\d+)>/)![1];
+    else if (/^Blight<(\d+)>/.test(tok)) cost.blight = +tok.match(/^Blight<(\d+)>/)![1];
+    else if (/^tapXType<(\d+)\/([^/>]+)/.test(tok)) { const m = tok.match(/^tapXType<(\d+)\/([^/>]+)/)!; cost.tapType = { n: +m[1], filter: m[2] }; }
     else if (/^AddCounter<(\d+)\/LOYALTY>/.test(tok)) cost.loyalty = +tok.match(/^AddCounter<(\d+)/)![1];
     else if (/^SubCounter<(\d+|X)\/LOYALTY>/.test(tok)) { const v = tok.match(/^SubCounter<(\d+|X)/)![1]; cost.loyalty = v === 'X' ? -1 : -(+v); }
     else if (/^[0-9WUBRGCXSP\/]+$/.test(tok)) manaToks.push(tok);
@@ -108,6 +112,7 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
   else if (api === 'Animate' && (params.Triggers || params.Abilities || params.HiddenKeywords
     || (params.staticAbilities && !params.staticAbilities.split(',').every(n => continuousSupported(face.svars, parseParams(face.svars[n.trim()] ?? '')))))) notes.push('animate: granted abilities ignored');
+  else if (api === 'AlterAttribute' && !(params.Attributes ?? '').split(',').every(a => ['Suspected', 'Solved', 'Saddled', 'Prepared'].includes(a.trim()))) notes.push(`attribute "${params.Attributes}" ignored`);
   else if (api === 'DelayedTrigger') {
     if (!['Phase', 'SpellCast'].includes(params.Mode)) notes.push(`delayed trigger "${params.Mode}" ignored`);
     else if (params.Execute && face.svars[params.Execute] && depth < 8) compileEffect(face, face.svars[params.Execute], notes, depth + 1);   // notes only
@@ -223,6 +228,9 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       const sac = parts[1].match(/Sac<\d+\/([^/>]+)/)?.[1] ?? 'Creature';
       altAdditional = { sac, orMana: parseManaCost(parts[2]) };
     }
+    if (base === 'Bestow' && /</.test(k)) notes.push('bestow cost with extra parts ignored');
+    if (base === 'Craft' && !/ExileCtrlOrGrave</.test(k)) notes.push('craft cost ignored');
+    if (/^Protection( from (white|blue|black|red|green|everything|multicolored|creatures|artifacts|enchantments|instants|sorceries|planeswalkers))?$/i.test(base)) continue;
     if (!SUPPORTED_KEYWORDS.has(base) && !/^etbCounter/.test(base) && !/^CARDNAME/.test(base)) notes.push(`keyword "${base}" ignored`);
   }
   const abilities: Ability[] = [];
@@ -299,6 +307,8 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       // free spells ("if you control a commander") and pitch costs (life, exile from hand, return a land, sacrifice)
     } else if (m === 'RaiseCost' && !params.ValidTarget && !params.Cost && /Spell/.test(params.Type ?? 'Spell')) {
       // "spells cost {N} more" (Thalia, Disruptor Flute)
+    } else if (m === 'OptionalCost' && /^Blight<\d+>$/.test(params.Cost ?? '')) {
+      // "as an additional cost to cast this spell, you may blight N"
     } else if (m === 'CantBeActivated' && /!ManaAbility/.test(params.ValidSA ?? '')) {
       // "can't be activated unless they're mana abilities"
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker', 'CantPreventDamage'].includes(m)) {

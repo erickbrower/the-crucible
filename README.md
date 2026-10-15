@@ -193,6 +193,10 @@ Also supported, each with its own test file:
   "as this enters, choose a creature type / card name"; "other creatures enter with an extra counter"
   (Gev, Giada); delayed triggers (Mana Drain's mana, Mistrise Village's uncounterable spell); abilities and
   triggers granted by statics (Adagia at 12 charge); land-played triggers; "can't be activated" locks.
+- **More keywords** (`keywords2.test.ts`): blight (as a cost, an optional additional cost and an effect),
+  proliferate, suspect, saddle, mayhem, bargain, protection (from colors, types or everything; no damage,
+  targeting or blocking from those sources, and The One Ring's player protection), escape (Uro, Phlage),
+  tiered, plot, bestow and craft.
 - **Graveyard decks** (`meta.test.ts`): Delve, mass reanimation (Raise the Past, Bringer of the Last Gift),
   Superior Spider-Man entering as a copy of a graveyard creature, rituals cast only when they enable a
   spell, trigger costs that discard (Formidable Speaker), and a reanimator AI that discards its fatties.
@@ -226,11 +230,11 @@ indestructible.
 - Triggered and activated abilities resolve immediately instead of using the stack, so they
   can't be responded to.
 - Anything listed by `coverage` is ignored or approximated. Examples: adventures and omens
-  (only the creature half), Disguise, Plot, Saddle, graveyard-cast abilities other
-  than flashback, "can't be countered", most replacement effects, non-mana abilities granted by
-  statics, Animate or temporary effects, and spell-side backs of modal double-faced cards. Across
-  Erick's decks and all gauntlets, 233 of 971 distinct cards still have at least one such note
-  (346 before October 12, 2026; 298 before October 14).
+  (only the creature half), Disguise, Dash, Disturb, Harmonize, "can't be countered", most replacement
+  effects, abilities granted by Animate or temporary effects, and spell-side backs of modal double-faced
+  cards. `npm run sim -- mechanics` lists every rules keyword that's still missing. Across Erick's decks
+  and all gauntlets, 208 of 971 distinct cards still have at least one such note (346 before October 12,
+  2026; 298 before October 14; 233 before the mechanics batch of October 14).
 - Vehicles are only crewed to attack, never to block. Stations are charged after combat.
 - No hidden-information modeling: the AI sees both hands, so "look at their hand" adds nothing beyond
   the choice it enables (Deep-Cavern Bat takes the best card).
