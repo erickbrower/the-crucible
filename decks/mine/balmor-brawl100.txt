@@ -33,7 +33,7 @@ Deck
 1 Wrath of the Bloodmane
 1 Electro's Bolt
 1 Quick Study
-1 Arcane Epiphany
+1 No Admittance
 1 Benevolent River Spirit
 1 Choco-Comet
 1 Galvanize
@@ -52,7 +52,7 @@ Deck
 1 Glen Elendra Guardian
 1 High Fae Trickster
 1 Repurposing Bay
-1 Thunder Salvo
+1 Pyroclasm
 1 Stormchaser's Talent
 1 Roaring Furnace // Steaming Sauna
 1 Identity Echo
