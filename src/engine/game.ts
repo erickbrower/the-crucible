@@ -2400,6 +2400,19 @@ export class Game {
         break;
       }
       case 'RevealHand': break;
+      case 'Empower': {
+        // "Empower Jace N": N loyalty counters on a Jace token you control, creating it first if needed
+        const n = Math.max(1, this.amount(P.Num ?? '1', sub, def));
+        const type = P.Type ?? 'Jace';
+        const existing = this.bf.find(x => x.controller === ctx.p && x.token && x.def.types.includes('Planeswalker') && x.def.subtypes.includes(type));
+        if (existing) this.addCounters(existing, 'LOYALTY', n);
+        else {
+          const tdef = { ...loadToken('u_empower_' + type.toLowerCase()), loyalty: n };
+          this.enter({ id: this.nextId++, def: tdef, owner: ctx.p, token: true }, ctx.p, { token: true });
+        }
+        this.trace(`empowers ${type} ${n}`, ctx.p);
+        break;
+      }
       case 'Blight': {
         const n = this.amount(P.Num ?? '1', sub, def);
         for (const t of P.Defined ? defined() : [{ kind: 'player', pid: ctx.p } as Target]) if (t.kind === 'player') this.blight(t.pid, n);

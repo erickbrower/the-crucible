@@ -163,3 +163,16 @@ d('tiered, plot, bestow and craft', () => {
     expect(g.players[0].exile.map(c => c.def.name)).toContain('Leyline Axe');
   });
 });
+
+d('empower', () => {
+  it('No Admittance creates a Jace token with 1 loyalty, and a second empower adds to it', () => {
+    const g = setup({ hand: ['No Admittance', 'Solve for Disappointment'], bf: ['Mountain', 'Mountain', 'Swamp', 'Swamp'] }, { hand: ['Serra Angel'] });
+    g.castSpell(0, g.players[0].hand.find(c => c.def.name === 'No Admittance')!);
+    const jace = g.bf.find(x => x.controller === 0 && x.def.subtypes.includes('Jace'))!;
+    expect(jace.counters.LOYALTY).toBe(1);
+    g.castSpell(0, g.players[0].hand.find(c => c.def.name === 'Solve for Disappointment')!);
+    expect(jace.counters.LOYALTY).toBe(2);
+    expect(g.bf.filter(x => x.def.subtypes.includes('Jace')).length).toBe(1);
+    expect(loadCard('No Admittance').notes).toEqual([]);
+  });
+});
