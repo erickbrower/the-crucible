@@ -14,7 +14,7 @@ export const SUPPORTED_APIS = new Set([
   'Investigate', 'Amass', 'Endure', 'Earthbend', 'Connive', 'Animate', 'Effect', 'ChooseType', 'StoreSVar',
   'Cleanup', 'ImmediateTrigger', 'GenericChoice', 'ChooseCard', 'Pump', 'Regenerate', 'UntapAll', 'RemoveCounter',
   'AddPhase', 'MultiplyCounter', 'RevealHand', 'NameCard', 'CopyPermanent', 'DelayedTrigger', 'SacrificeAll',
-  'Blight', 'Proliferate', 'AlterAttribute', 'Protection',
+  'Blight', 'Proliferate', 'AlterAttribute', 'Protection', 'Empower',
 ]);
 const IGNORED_APIS = new Set(['StoreSVar', 'GenericChoice', 'Regenerate']);
 const SILENT_APIS = new Set(['ChooseType', 'Cleanup']);
