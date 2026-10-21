@@ -22,7 +22,7 @@ Deck
 1 Scavenging Ooze
 1 Lyra Dawnbringer
 1 Thalia, the Survivor
-1 Felidar Savior
+1 Essence Channeler
 1 Vanguard Seraph
 1 Migrating Ketradon
 1 Spider-Ham, Peter Porker
