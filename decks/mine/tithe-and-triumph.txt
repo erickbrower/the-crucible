@@ -9,7 +9,8 @@ Deck
 4 Twinblade Paladin (FDN) 503
 2 Authority of the Consuls (FIC) 232
 1 Temple of Silence (FDN) 704
-3 Insatiable Avarice (OTJ) 91
+2 Vindictive Triumph
+1 Lich's Relic
 2 Mortify (FDN) 662
 2 Moment of Craving (FDN) 524
 2 Sudden Strike (SPM) 19
