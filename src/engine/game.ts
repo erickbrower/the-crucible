@@ -2,7 +2,7 @@
 // Arena games: mana, casting, a one-deep response window for counterspells, triggers, static
 // buffs, combat (all common keywords), removal, tokens, planeswalkers and the command zone.
 import { Ability, CardDef, Color, COLORS, Effect, Pip, Trigger, cantBeCountered } from '../cards/model.js';
-import { loadToken, parseCost, parseManaCost, compileGift, compileEffect } from '../cards/compile.js';
+import { loadToken, parseCost, parseManaCost, compileGift, compileEffect, EFFECT_TRIGGER_MODES } from '../cards/compile.js';
 import { matches, Subject, FilterCtx } from './filters.js';
 import { parseParams } from '../cards/forge.js';
 import { CardInst, DeckList, Perm, Player, Rng, makeRng } from './state.js';
@@ -55,6 +55,7 @@ export interface Ctx {
   sacrificedPower?: number;
   spell?: StackItem;
   remembered?: CardInst[];         // cards an earlier step of this effect chain "remembered" (Forge RememberChanged etc.)
+  imprinted?: CardInst[];          // cards an earlier step exiled with Imprint$ True (Chandra, Torch of Defiance)
   chosen?: CardInst[];             // cards a ChooseCard step picked (Forge ChosenCard)
   resolvedThisTurn?: number;
   rememberedNumber?: number;       // a number an earlier step remembered (Mana Drain: the countered spell's mana value)       // how many times this triggered ability has resolved this turn, counting this one
@@ -81,7 +82,7 @@ export class Game {
   log: string[] = [];
   stack: StackItem[] = [];
   /** Delayed triggers ("at the beginning of your next main phase", "the next spell you cast this turn"). One-shot. */
-  delayed: { trig: Trigger; controller: number; source?: Perm | CardInst; untilSeq: number; number?: number }[] = [];
+  delayed: { trig: Trigger; controller: number; source?: Perm | CardInst; untilSeq: number; number?: number; persistent?: boolean }[] = [];
   /** Additional combat phases still to come this turn, each with an optional effect that runs as it begins. */
   extraCombats: { eff?: Effect; ctx?: Ctx }[] = [];
   opts: GameOptions;
@@ -1105,6 +1106,14 @@ export class Game {
       const r = parseParams(svars[name] ?? '');
       if (r.Event === 'Counter' && /IsRemembered/.test(r.ValidCard ?? '')) for (const o of objects) { this.uncounterable.add(o); this.trace(`${o.def.name} can't be countered`, ctx.p); }
     }
+    // triggered abilities of an Effect (emblems like Chandra's "whenever you cast a spell, 5 damage to any target")
+    for (const name of (P.Triggers ?? '').split(',').map(x => x.trim()).filter(Boolean)) {
+      const t = parseParams(svars[name] ?? '');
+      const exec = def ? this.compileSVar(def, t.Execute ?? '') : undefined;
+      if (!exec || !EFFECT_TRIGGER_MODES.has(t.Mode)) continue;
+      this.delayed.push({ trig: { mode: t.Mode, params: t, effect: exec }, controller: ctx.p, source: ctx.source ?? ctx.card, untilSeq, persistent: true });
+      this.trace(`${P.Name ?? def?.name ?? 'effect'}: ${t.TriggerDescription ?? t.Mode}`, ctx.p);
+    }
     if (kept.length) {
       this.tempEffects.push({ name: P.Name ?? def?.name ?? 'effect', controller: ctx.p, statics: kept, objects, untilSeq });
       this.trace(`${P.Name ?? def?.name ?? 'effect'}: ${kept.map(s => s.Description ?? s.Mode).join('; ')}${untilSeq === Infinity ? '' : untilSeq === this.turnSeq ? ' (this turn)' : ' (until their next turn)'}`, ctx.p);
@@ -1779,7 +1788,7 @@ export class Game {
     for (const dt of [...this.delayed]) {
       if (dt.untilSeq < this.turnSeq) { this.delayed.splice(this.delayed.indexOf(dt), 1); continue; }
       if (!this.delayedMatches(dt.trig, dt.controller, ev)) continue;
-      this.delayed.splice(this.delayed.indexOf(dt), 1);
+      if (!dt.persistent) this.delayed.splice(this.delayed.indexOf(dt), 1);
       const fake: CardInst = dt.source ?? { id: -1, def: { ...(this.players[dt.controller].command[0]?.def ?? ({} as CardDef)), triggers: [] }, owner: dt.controller };
       this.pendingTriggers.push({ trig: dt.trig, perm: fake, controller: dt.controller, event: ev, number: dt.number });
     }
@@ -2057,6 +2066,7 @@ export class Game {
   resolveEffect(eff: Effect, ctx: Ctx, depth = 0): void {
     if (this.over || depth > 10) return;
     ctx.remembered ??= [];                           // shared by every step of this chain (sub contexts copy the reference)
+    ctx.imprinted ??= [];
     ctx.chosen ??= [];
     const P = eff.params;
     const def = ctx.source?.def ?? ctx.card?.def;
@@ -2341,6 +2351,7 @@ export class Game {
             else if (P.DestinationZone === 'Graveyard') pl.graveyard.push(c);
             else pl.hand.push(c);
             if (P.RememberChanged) ctx.remembered!.push(c);
+            if (P.Imprint === 'True') ctx.imprinted!.push(c);
           } else if (P.DestinationZone2 === 'Graveyard') pl.graveyard.push(c);
           else if (P.DestinationZone2 === 'Exile') pl.exile.push(c);
           else pl.library.unshift(c);
@@ -2506,8 +2517,27 @@ export class Game {
         }
         break;
       }   // the AI already plays with open information; the next step makes the choice
+      case 'Play': {
+        // "You may cast that card": cast exiled (imprinted/remembered) cards right now, paying their cost unless WithoutManaCost
+        const pool = /IsImprinted/.test(P.Valid ?? '') ? ctx.imprinted! : /IsRemembered/.test(P.Valid ?? '') ? ctx.remembered!
+          : P.Defined === 'Remembered' ? ctx.remembered! : P.Defined === 'Imprinted' ? ctx.imprinted! : [];
+        const pl = this.players[ctx.p];
+        const free = P.WithoutManaCost === 'True';
+        for (const c of [...pool]) {
+          if (!this.inExile(c) || c.def.types.includes('Land')) continue;    // ValidSA$ Spell: lands can't be "cast"
+          if (!AI.wantsToCastNow(this, pl, c, free)) continue;
+          pl.mayPlay = [...(pl.mayPlay ?? []).filter(m => m.card !== c), { card: c, untilSeq: this.turnSeq, free }];
+          if (this.castSpell(ctx.p, c, { fromExile: true })) {
+            this.trace(`casts ${c.def.name} from exile`, ctx.p);
+            if (P.RememberPlayed) ctx.remembered!.push(c);
+          } else pl.mayPlay = (pl.mayPlay ?? []).filter(m => m.card !== c);
+          if (P.Amount !== 'All') break;
+        }
+        break;
+      }
       case 'Cleanup': {
         if (P.ClearRemembered) ctx.remembered!.length = 0;
+        if (P.ClearImprinted) ctx.imprinted!.length = 0;
         if (P.ClearChosenCard) ctx.chosen!.length = 0;
         break;
       }

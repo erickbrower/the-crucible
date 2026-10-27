@@ -7,7 +7,7 @@ const CARD_TYPES = ['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker
 const SUPERTYPES = ['Legendary', 'Basic', 'Snow', 'World'];
 
 /** Effect APIs the engine implements (fully or approximately). */
-export const SUPPORTED_APIS = new Set([
+export const SUPPORTED_APIS = new Set(['Play', 
   'DealDamage', 'DamageAll', 'Destroy', 'DestroyAll', 'ChangeZone', 'ChangeZoneAll', 'Draw', 'Discard', 'Token',
   'Pump', 'PumpAll', 'PutCounter', 'PutCounterAll', 'Counter', 'GainLife', 'LoseLife', 'Mana', 'Scry', 'Surveil',
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
@@ -110,6 +110,7 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
   else if (IGNORED_APIS.has(api)) notes.push(`ignored effect "${api}"`);
   else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
+  else if (api === 'Play' && ((params.ValidZone ?? 'Exile') !== 'Exile' || !/IsImprinted|IsRemembered/.test(params.Valid ?? '') && !/^(Remembered|Imprinted)$/.test(params.Defined ?? ''))) notes.push(`unsupported effect "Play" from ${params.ValidZone ?? 'that zone'}`);
   else if (api === 'Animate' && (params.Triggers || params.Abilities || params.HiddenKeywords
     || (params.staticAbilities && !params.staticAbilities.split(',').every(n => continuousSupported(face.svars, parseParams(face.svars[n.trim()] ?? '')))))) notes.push('animate: granted abilities ignored');
   else if (api === 'AlterAttribute' && !(params.Attributes ?? '').split(',').every(a => ['Suspected', 'Solved', 'Saddled', 'Prepared'].includes(a.trim()))) notes.push(`attribute "${params.Attributes}" ignored`);
@@ -153,6 +154,9 @@ function tempStaticSupported(st: Record<string, string>): boolean {
   return /^CantBlock$|^CantAttack$|^CantAttack,CantBlock$/.test(st.Mode);
 }
 
+/** Trigger modes an Effect (emblem) may carry that the engine runs, via its delayed-trigger matcher. */
+export const EFFECT_TRIGGER_MODES = new Set(['SpellCast', 'Phase']);
+
 /** Parts of a Forge "Effect" (temporary statics/triggers/replacements) the engine does not run yet. */
 export function effectGaps(face: { svars: Record<string, string> }, params: Record<string, string>): string[] {
   const out: string[] = [];
@@ -164,7 +168,7 @@ export function effectGaps(face: { svars: Record<string, string> }, params: Reco
     } else if (st.Mode === 'CantPreventDamage') { /* nothing prevents damage in the engine anyway */
     } else if (!tempStaticSupported(st)) out.push(`effect static "${st.Mode}${st.Mode === 'Continuous' ? ' ' + Object.keys(st).filter(k => /^(Add|Set|Remove)/.test(k)).join('+') : ''}" ignored`);
   }
-  for (const t of list('Triggers')) out.push(`effect trigger "${t.Mode}" ignored`);
+  for (const t of list('Triggers')) if (!EFFECT_TRIGGER_MODES.has(t.Mode)) out.push(`effect trigger "${t.Mode}" ignored`);
   for (const r of list('ReplacementEffects')) if (!(r.Event === 'Counter' && /IsRemembered/.test(r.ValidCard ?? ''))) out.push(`effect replacement "${r.Event}" ignored`);
   if (!params.StaticAbilities && !params.Triggers && !params.ReplacementEffects) out.push('ignored effect "Effect"');
   return out;
