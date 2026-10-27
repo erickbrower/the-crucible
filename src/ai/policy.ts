@@ -650,11 +650,45 @@ function costPenalty(g: Game, p: Player, perm: Perm, ab: Ability): number {
   return pen;
 }
 
+/** "+1: Add {R}{R}" (Chandra, Torch of Defiance): use it like a ritual, only when the mana lets us cast something we otherwise can't. */
+function loyaltyRitual(g: Game, p: Player, perm: Perm, ab: Ability, idx: number): Action | undefined {
+  if (perm.loyaltyUsedTurn === g.turn || g.cantActivate(perm, false) || !costPayable(g, p, perm, ab)) return undefined;
+  const ctx: Ctx = { p: p.id, source: perm, x: 0, kicked: false, targets: [] };
+  const n = Math.max(1, g.amount(ab.effect.params.Amount ?? '1', ctx, perm.def));
+  const after = g.availableMana(p.id) + (p.pool?.length ?? 0) + n;
+  const enables = [...p.hand, ...p.command].filter(c => !isLandCard(c) && !g.canCast(p.id, c) && c.def.mv <= after);
+  if (!enables.length) return undefined;
+  const key = `${g.turn}:${g.active}:${g.phase}:${perm.id}:m${idx}`;
+  if (activatedThisWindow.has(key)) return undefined;
+  return {
+    score: 4 + Math.max(...enables.map(c => cardValue(g, p, c))), label: `activate ${perm.def.name} for mana`,
+    run: () => {
+      activatedThisWindow.add(key);
+      if (!costPayable(g, p, perm, ab)) return false;
+      payCost(g, p, perm, ab);
+      g.trace(`activates ${perm.def.name}: ${ab.description ?? 'add mana'}`, p.id);
+      g.resolveEffect(ab.effect, ctx);
+      return true;
+    },
+  };
+}
+
+/** Cast a card right now from exile ("you may cast that card")? Permanents yes; spells only when they do something useful now. */
+export function wantsToCastNow(g: Game, p: Player, c: CardInst, free: boolean): boolean {
+  if (isLandCard(c)) return false;
+  const d = c.def;
+  if (!d.spell || d.types.some(t => ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Battle'].includes(t))) return true;
+  if (d.spell.effect.api === 'Counter') return false;
+  const sc = effectScore(g, d.spell.effect, { p: p.id, card: c, x: 0, kicked: false, targets: [] });
+  return sc > (free ? 0.3 : 1);
+}
+
 function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
   const acts: Action[] = [];
   const granting = g.bf.some(x => x.def.statics.some(st => st.params.AddAbility));
   for (const perm of g.bf.filter(x => x.controller === p.id)) {
     [...perm.def.abilities, ...(granting ? g.grantedAbilities(perm).filter(a => a.kind === 'activated') : [])].forEach((ab, idx) => {
+      if (ab.kind === 'mana' && ab.planeswalker && window !== 'instant') { const a = loyaltyRitual(g, p, perm, ab, idx); if (a) acts.push(a); return; }
       if (ab.kind !== 'activated' || g.cantActivate(perm, false)) return;
       if (window === 'instant' && (ab.sorcerySpeed || ab.planeswalker)) return;
       const key = `${g.turn}:${g.active}:${g.phase}:${perm.id}:${idx}`;

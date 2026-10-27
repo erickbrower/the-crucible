@@ -14,9 +14,9 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 |---|---|---|
 | ✅ supported | 71 | 74 |
 | 🟡 partial | 4 | 4 |
-| ❌ missing | 24 | 24 |
-| ❔ unflagged | 21 | 21 |
-| · not modeled | 0 | 141 |
+| ❌ missing | 25 | 25 |
+| ❔ unflagged | 22 | 22 |
+| · not modeled | 0 | 139 |
 
 ## Keyword abilities (702)
 
@@ -42,6 +42,7 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Split Second | 702.61 | ❌ missing |  | 1 | Legolas's Quick Reflexes |
 | Storm | 702.40 | ❌ missing |  | 1 | Flusterstorm |
 | Toxic | 702.164 | ❌ missing |  | 1 | Skrelv, Defector Mite |
+| Web-slinging | 702.188 | ❌ missing | 1 |  | Spider-Man India |
 | Cleave | 702.148 | ❔ unflagged |  | 5 | Wash Away |
 | Solved | 702.169 | ❔ unflagged |  | 3 | Case of the Uneaten Feast |
 | Awaken | 702.113 | ❔ unflagged | 1 | 1 | Awaken the Inferno, Invasion of Zendikar |
@@ -49,56 +50,57 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Exhaust | 702.177 | ❔ unflagged | 1 |  | Echoing Cavern |
 | Fear | 702.36 | ❔ unflagged | 1 |  | Fear of Lost Teeth |
 | Haunt | 702.55 | ❔ unflagged |  | 1 | Haunted Ridge |
+| Persist | 702.79 | ❔ unflagged | 1 |  | Rhys, the Evermore |
 | Power-up | 702.193 | ❔ unflagged |  | 1 | Quicksilver, Brash Blur |
 | Prototype | 702.160 | ❔ unflagged |  | 1 | Moonsnare Prototype |
 | Undying | 702.93 | ❔ unflagged | 1 |  | Shadow of the Goblin |
-| Flying | 702.9 | ✅ supported | 19 | 27 | Dawnwing Marshal, Leonin Skyhunter, Dazzling Angel, Inspiring Overseer, … |
-| Lifelink | 702.15 | ✅ supported | 14 | 18 | Enduring Innocence, Felidar Savior, Lyra Dawnbringer, Regal Caracal, … |
-| Haste | 702.10 | ✅ supported | 12 | 19 | Aurelia, the Warleader, Smaug the Magnificent, Lavaspur Boots, Clockwork Percussionist, … |
-| Flash | 702.8 | ✅ supported | 11 | 17 | Anafenza, Unyielding Lineage, Stasis Snare, Resolute Reinforcements, Little Bear, … |
-| Ward | 702.21 | ✅ supported | 11 | 17 | Lionheart Glimmer, Seal from Existence, Lavaspur Boots, Unflinching Hortimancer, … |
-| Vigilance | 702.20 | ✅ supported | 12 | 14 | Prideful Parent, Serra Angel, Serra's Guardian, Aurelia, the Warleader, … |
-| Deathtouch | 702.2 | ✅ supported | 10 | 14 | Attercop, Treetop Snarespinner, Walltop Sentries, Perforating Artist, … |
-| Hexproof | 702.11 | ✅ supported | 7 | 14 | Liliana the Faultless, Teyo, Lightshield Expert, Miles Morales, Spectacular Tactics, … |
-| Indestructible | 702.12 | ✅ supported | 10 | 11 | Angelic Guardian, The Mind Stone, Valorous Stance, Boros Charm, … |
-| Trample | 702.19 | ✅ supported | 8 | 13 | Thorin, Mountain-king, Leyline Axe, Beorn, Reluctant Host, Beorn the Fierce, … |
-| First Strike | 702.7 | ✅ supported | 9 | 11 | Anafenza, Unyielding Lineage, Lyra Dawnbringer, Brightblade Stoat, Bonehoard Dracosaur, … |
-| Menace | 702.111 | ✅ supported | 9 | 11 | Scarlet Spider, Kaine, Nighthowl Pursuer, Sunset Saboteur, Gollum, Silent Slinker, … |
-| Enchant | 702.5 | ✅ supported | 4 | 14 | Convenient Target, Infinite Coursework, Twinblade Blessing, Pacifism, … |
-| Double Strike | 702.4 | ✅ supported | 9 | 8 | Twinblade Paladin, Ajani, Caller of the Pride, Goring Ceratops, Leyline Axe, … |
-| Kicker | 702.33 | ✅ supported | 5 | 12 | Burst Lightning, Whoosh!, Consult the Star Charts, Grow from the Ashes, … |
-| Warp | 702.185 | ✅ supported | 9 | 8 | Starfield Shepherd, Haliya, Guided by Light, Hylderblade, Mightform Harmonizer, … |
-| Reach | 702.17 | ✅ supported | 8 | 8 | Attercop, Treetop Snarespinner, Walltop Sentries, Spider-Gwen, Free Spirit, … |
-| Equip | 702.6 | ✅ supported | 7 | 7 | Dwarven Mauler, Leyline Axe, Lavaspur Boots, Hylderblade, … |
-| Prowess | 702.108 | ✅ supported | 3 | 8 | Heartfire Immolator, Traxos, Academy Guardian, Ruric Thar, Biomagus, Elementalist Adept, … |
+| Flying | 702.9 | ✅ supported | 27 | 27 | Dawnwing Marshal, Leonin Skyhunter, Dazzling Angel, Inspiring Overseer, … |
+| Haste | 702.10 | ✅ supported | 19 | 19 | Aurelia, the Warleader, Smaug the Magnificent, Lavaspur Boots, Clockwork Percussionist, … |
+| Lifelink | 702.15 | ✅ supported | 20 | 18 | Enduring Innocence, Felidar Savior, Lyra Dawnbringer, Regal Caracal, … |
+| Ward | 702.21 | ✅ supported | 19 | 17 | Lionheart Glimmer, Seal from Existence, Lavaspur Boots, Ovika, Enigma Goliath, … |
+| Flash | 702.8 | ✅ supported | 15 | 17 | Anafenza, Unyielding Lineage, Stasis Snare, Resolute Reinforcements, Elementalist Adept, … |
+| Vigilance | 702.20 | ✅ supported | 17 | 14 | Prideful Parent, Serra Angel, Serra's Guardian, Aurelia, the Warleader, … |
+| Deathtouch | 702.2 | ✅ supported | 14 | 14 | Attercop, Treetop Snarespinner, Walltop Sentries, Perforating Artist, … |
+| Trample | 702.19 | ✅ supported | 15 | 13 | Thorin, Mountain-king, Leyline Axe, Balmor, Battlemage Captain, Beorn, Reluctant Host, … |
+| First Strike | 702.7 | ✅ supported | 16 | 11 | Anafenza, Unyielding Lineage, Lyra Dawnbringer, Brightblade Stoat, Bonehoard Dracosaur, … |
+| Indestructible | 702.12 | ✅ supported | 13 | 11 | Angelic Guardian, The Mind Stone, Valorous Stance, Boros Charm, … |
+| Hexproof | 702.11 | ✅ supported | 9 | 14 | Liliana the Faultless, Teyo, Lightshield Expert, Selfless Safewright, Celestial Armor, … |
+| Equip | 702.6 | ✅ supported | 15 | 7 | Dwarven Mauler, Leyline Axe, Lavaspur Boots, Hylderblade, … |
+| Kicker | 702.33 | ✅ supported | 10 | 12 | Burst Lightning, Whoosh!, Consult the Star Charts, Grow from the Ashes, … |
+| Menace | 702.111 | ✅ supported | 11 | 11 | Scarlet Spider, Kaine, Nighthowl Pursuer, Sunset Saboteur, Gollum, Silent Slinker, … |
+| Double Strike | 702.4 | ✅ supported | 13 | 8 | Twinblade Paladin, Ajani, Caller of the Pride, Goring Ceratops, Leyline Axe, … |
+| Reach | 702.17 | ✅ supported | 10 | 8 | Attercop, Treetop Snarespinner, Walltop Sentries, Spider-Gwen, Free Spirit, … |
+| Warp | 702.185 | ✅ supported | 10 | 8 | Starfield Shepherd, Haliya, Guided by Light, Hylderblade, Mightform Harmonizer, … |
+| Enchant | 702.5 | ✅ supported | 3 | 14 | Convenient Target, Infinite Coursework, Twinblade Blessing, Pacifism, … |
+| Prowess | 702.108 | ✅ supported | 6 | 8 | Firebending Student, Elementalist Adept, Tetsuko Umezawa, Pursuer, Ruric Thar, Biomagus, … |
+| Flashback | 702.34 | ✅ supported | 6 | 5 | Think Twice, Inspiration from Beyond, Predictive Preparations, Laughing Mad, … |
 | Evoke | 702.74 | ✅ supported |  | 10 | Deceit, Wistfulness, Fury, Subtlety, … |
 | Impending | 702.176 | ✅ supported | 6 | 3 | Overlord of the Mistmoors, Overlord of the Hauntwoods, Overlord of the Balemurk |
-| Flashback | 702.34 | ✅ supported | 2 | 5 | Predictive Preparations, Flashback, Reckless Charge, Snapcaster Mage |
+| Station | 702.184 | ✅ supported | 2 | 7 | Dawnsire, Sunstar Dreadnought, Lumen-Class Frigate, Adagia, Windswept Bastion, Uthros, Titanic Godcore, … |
+| Offspring | 702.175 | ✅ supported | 2 | 6 | Steampath Charger, Intrepid Rabbit, Iridescent Vinelasher, Starscape Cleric |
 | Mobilize | 702.181 | ✅ supported | 2 | 5 | Voice of Victory |
-| Offspring | 702.175 | ✅ supported | 1 | 6 | Steampath Charger, Intrepid Rabbit, Starscape Cleric, Iridescent Vinelasher |
-| Station | 702.184 | ✅ supported |  | 7 | Adagia, Windswept Bastion, Uthros, Titanic Godcore, Extinguisher Battleship, Evendo, Waking Haven |
 | Affinity | 702.41 | ✅ supported | 3 | 3 | Claws Out, Cantankerous Keepers, Sapling Nursery, Emry, Lurker of the Loch, … |
+| Cycling | 702.29 | ✅ supported | 5 | 1 | Marauding Mako, Migrating Ketradon, Migration Path |
+| Mayhem | 702.187 | ✅ supported | 6 |  | Electro's Bolt, Scarlet Spider, Kaine, Swarm, Being of Bees, Ultimate Green Goblin |
 | Protection | 702.16 | ✅ supported |  | 6 | The One Ring, Mother of Runes, Emrakul, the Aeons Torn |
 | Delve | 702.66 | ✅ supported |  | 5 | Dig Through Time, Treasure Cruise, Temporal Trespass |
 | Escape | 702.138 | ✅ supported |  | 5 | Escape Tunnel, Alex Wilder, Runaway, Phlage, Titan of Fire's Fury, Cling to Dust, … |
 | Gift | 702.174 | ✅ supported |  | 5 | Bringer of the Last Gift, Into the Flood Maw |
-| Spree | 702.172 | ✅ supported | 4 | 1 | Insatiable Avarice, Requisition Raid, Three Steps Ahead |
+| Sneak | 702.190 | ✅ supported | 1 | 4 | Elektra, Daughter of the Hand, Leonardo, Cutting Edge, Leonardo, Leader in Blue, Splinter, Hamato Yoshi |
+| Spree | 702.172 | ✅ supported | 4 | 1 | Insatiable Avarice, Final Showdown, Three Steps Ahead, Requisition Raid |
+| Convoke | 702.51 | ✅ supported | 3 | 1 | Selfless Safewright, Winter, Team Player, Bloodline Bidding, Party Thrasher |
 | Craft | 702.167 | ✅ supported |  | 4 | Clay-Fired Bricks, Spring-Loaded Sawblades, Braided Net, The Enigma Jewel |
-| Cycling | 702.29 | ✅ supported | 3 | 1 | Marauding Mako, Migrating Ketradon, Migration Path |
-| Sneak | 702.190 | ✅ supported |  | 4 | Leonardo, Cutting Edge, Leonardo, Leader in Blue, Splinter, Hamato Yoshi |
+| Firebending | 702.189 | ✅ supported | 3 | 1 | Firebending Student, Fire Nation Occupation |
 | Bestow | 702.103 | ✅ supported |  | 3 | Detective's Phoenix, Springheart Nantuko |
-| Convoke | 702.51 | ✅ supported | 2 | 1 | Winter, Team Player, Selfless Safewright, Bloodline Bidding, Party Thrasher |
 | Plot | 702.170 | ✅ supported |  | 3 | Slickshot Show-Off |
 | Saddle | 702.171 | ✅ supported | 1 | 2 | Brightfield Glider, Defend the Rider, Switchgrass Grazer |
 | Tiered | 702.183 | ✅ supported |  | 3 | Restoration Magic, Fire Magic |
 | Changeling | 702.73 | ✅ supported | 1 | 1 | Graveshifter, Changeling Outcast |
 | Crew | 702.122 | ✅ supported |  | 2 | Spring-Loaded Sawblades, Defend the Rider |
 | Max Speed | 702.178 | ✅ supported |  | 2 | Perilous Snare |
-| Mayhem | 702.187 | ✅ supported | 2 |  | Scarlet Spider, Kaine, Swarm, Being of Bees |
 | Start Your Engines! | 702.179 | ✅ supported |  | 2 | Perilous Snare |
 | Bargain | 702.166 | ✅ supported | 1 |  | Torch the Tower |
 | Defender | 702.3 | ✅ supported | 1 |  | Ghalta the Immovable |
-| Firebending | 702.189 | ✅ supported |  | 1 | Fire Nation Occupation |
 | Ninjutsu | 702.49 | ✅ supported |  | 1 | Yuriko, the Tiger's Shadow, Ingenious Infiltrator, Prosperous Thief, Thousand-Faced Shadow, … |
 | Shroud | 702.18 | ✅ supported |  | 1 | Lightning Greaves |
 
@@ -107,17 +109,17 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Mechanic | Rule | Status | Erick's decks | Gauntlet decks | Cards with gaps (or examples) |
 |---|---|---|---|---|---|
 | Recruit | 701.70 | ❌ missing |  | 3 | Long Lake Nuisance, Lake-town Lookout |
+| Waterbend | 701.67 | ❌ missing | 1 | 1 | Aang, Swift Savior |
 | Airbend | 701.65 | ❌ missing |  | 1 | Aang, Swift Savior |
 | Manifest Dread | 701.62 | ❌ missing |  | 1 | Verdant Dread |
-| Waterbend | 701.67 | ❌ missing |  | 1 | Aang, Swift Savior |
-| Tap and Untap | 701.26 | 🟡 partial | 11 | 16 | Infinite Coursework, Sleep Magic |
-| Play | 701.18 | 🟡 partial |  | 5 | Bilbo, Thief in the Night, Malcolm, Alluring Scoundrel, Jarsyl, Dark Age Scion, Etali, Primal Conqueror |
+| Tap and Untap | 701.26 | 🟡 partial | 15 | 16 | Infinite Coursework, Sleep Magic |
+| Play | 701.18 | 🟡 partial | 1 | 5 | Bilbo, Thief in the Night, Malcolm, Alluring Scoundrel, Jarsyl, Dark Age Scion |
 | Regenerate | 701.19 | 🟡 partial |  | 2 | Swarmyard |
 | Shuffle | 701.24 | 🟡 partial |  | 1 | Urza, Lord High Artificer |
-| Empower Jace | 701.71 | ❔ unflagged | 3 | 2 | Fatehold Charm, Mindseeker Oculus, Protege's Awakening, Vraska's Final Mercy, … |
+| Empower Jace | 701.71 | ❔ unflagged | 8 | 2 | No Admittance, Plan for All Outcomes, Fatehold Charm, Mindseeker Oculus, … |
 | Abandon | 701.33 | ❔ unflagged | 2 | 2 | Temple of Abandon, Takenuma, Abandoned Mire |
+| Suspect | 701.60 | ❔ unflagged | 4 |  | Convenient Target, J. Jonah Jameson, Deadly Complication |
 | Collect Evidence | 701.59 | ❔ unflagged |  | 3 | Detective's Phoenix |
-| Suspect | 701.60 | ❔ unflagged | 3 |  | Convenient Target, Deadly Complication |
 | Behold | 701.4 | ❔ unflagged | 1 | 1 | Lys Alana Dignitary, Theorist's Sanctum |
 | Exert | 701.43 | ❔ unflagged |  | 2 | Arena of Glory |
 | Harness | 701.64 | ❔ unflagged | 1 | 1 | The Mind Stone |
@@ -125,21 +127,21 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Heal | 701.69 | ❔ unflagged |  | 1 | Wolverine, Fierce Fighter |
 | Manifest | 701.40 | ❔ unflagged |  | 1 | Verdant Dread |
 | The Ring Tempts You | 701.54 | ❔ unflagged |  | 1 | Sauron's Ransom |
-| Exile | 701.13 | ✅ supported | 18 | 29 | Enduring Innocence, Starfield Shepherd, Banishing Light, Stasis Snare, … |
-| Search | 701.23 | ✅ supported | 18 | 29 | Enduring Innocence, Starfield Shepherd, Banishing Light, Stasis Snare, … |
-| Create | 701.7 | ✅ supported | 19 | 27 | Arahbo, the First Fang, Cat Collector, Envoy of Okinec Ahau, Prideful Parent, … |
-| Destroy | 701.8 | ✅ supported | 19 | 20 | Felidar Cub, Elspeth, Storm Slayer, Prophesied End, Stroke of Midnight, … |
-| Scry | 701.22 | ✅ supported | 10 | 13 | Torch the Tower, Political Triumph, Rabbit Response, Temple of Triumph, … |
-| Surveil | 701.25 | ✅ supported | 9 | 14 | Enlightened Confidant, Ral Zarek, Guest Lecturer, Denzilore Fatehold, Eye of Jace, … |
-| Discard | 701.9 | ✅ supported | 7 | 12 | Green Goblin, Revenant, Ral Zarek, Guest Lecturer, Charming Scoundrel, Shadow of the Goblin, … |
-| Attach | 701.3 | ✅ supported | 7 | 7 | Thorin, Mountain-king, Leyline Axe, Lavaspur Boots, Hylderblade, … |
-| Mill | 701.17 | ✅ supported | 2 | 12 | Icetill Explorer, Dawnhand Eulogist, Trystan, Callous Cultivator, Lluwen, Imperfect Naturalist, … |
+| Exile | 701.13 | ✅ supported | 26 | 29 | Enduring Innocence, Starfield Shepherd, Banishing Light, Stasis Snare, … |
+| Search | 701.23 | ✅ supported | 26 | 29 | Enduring Innocence, Starfield Shepherd, Banishing Light, Stasis Snare, … |
+| Create | 701.7 | ✅ supported | 27 | 27 | Arahbo, the First Fang, Cat Collector, Envoy of Okinec Ahau, Prideful Parent, … |
+| Destroy | 701.8 | ✅ supported | 25 | 20 | Felidar Cub, Elspeth, Storm Slayer, Prophesied End, Stroke of Midnight, … |
+| Scry | 701.22 | ✅ supported | 17 | 13 | Torch the Tower, Political Triumph, Rabbit Response, Temple of Triumph, … |
+| Surveil | 701.25 | ✅ supported | 16 | 14 | Chandra, Chill of Compliance, Enlightened Confidant, Ral Zarek, Guest Lecturer, Denzilore Fatehold, … |
+| Discard | 701.9 | ✅ supported | 13 | 12 | Kiora, the Rising Tide, The Echoverse Fulcrum, Green Goblin, Revenant, Ral Zarek, Guest Lecturer, … |
+| Attach | 701.3 | ✅ supported | 13 | 7 | Thorin, Mountain-king, Leyline Axe, Lavaspur Boots, Hylderblade, … |
+| Mill | 701.17 | ✅ supported | 4 | 12 | Inspiration from Beyond, Madame Web, Clairvoyant, Icetill Explorer, Dawnhand Eulogist, … |
+| Counter | 701.6 | ✅ supported | 4 | 10 | Essence Scatter, Glen Elendra Guardian, An Offer You Can't Refuse, Icy Reception, … |
 | Sacrifice | 701.21 | ✅ supported | 6 | 7 | Political Triumph, Eye of Jace, Pick Your Poison, Garruk, Veiled Butcher, … |
-| Counter | 701.6 | ✅ supported | 2 | 10 | Icy Reception, Thranduil's Decree, Negate, Three Steps Ahead, … |
-| Fight | 701.14 | ✅ supported | 4 | 3 | Kapow!, Yoshimaru, Scrappy Stray, Affectionate Indrik, Troll Negotiations, … |
-| Blight | 701.68 | ✅ supported | 5 | 1 | Pyrrhic Strike, Requiting Hex, High Perfect Morcant, Blighted Blackthorn |
+| Fight | 701.14 | ✅ supported | 7 | 3 | Kapow!, Troll Negotiations, Yoshimaru, Scrappy Stray, Affectionate Indrik, … |
+| Blight | 701.68 | ✅ supported | 8 | 1 | Pyrrhic Strike, Requiting Hex, High Perfect Morcant, Blighted Blackthorn |
+| Reveal | 701.20 | ✅ supported | 7 | 2 | Deep-Cavern Bat, Invasion of Gobakhan |
 | Earthbend | 701.66 | ✅ supported | 3 | 3 | Bumi, Unleashed, Ba Sing Se, Earthbender Ascension, Badgermole Cub |
-| Reveal | 701.20 | ✅ supported | 4 | 2 | Deep-Cavern Bat, Invasion of Gobakhan |
 | Transform | 701.27 | ✅ supported | 4 | 2 | Miles Morales, Trystan, Callous Cultivator, Eddie Brock, Aang, Swift Savior, … |
 | Endure | 701.63 | ✅ supported | 2 | 3 | Anafenza, Unyielding Lineage, Descendant of Storms, Boseiju, Who Endures |
 | Double | 701.10 | ✅ supported | 1 | 3 | Miles Morales, Bristly Bill, Spine Sower, Mossborn Hydra, Scythecat Cub |
@@ -151,6 +153,6 @@ checked against the engine and against the decks in `decks/mine` and the gauntle
 | Cast | 701.5 | ✅ supported |  |  |  |
 | Connive | 701.50 | ✅ supported |  |  |  |
 
-## Not used by any deck here (141)
+## Not used by any deck here (139)
 
-Absorb, Adapt, Afflict, Afterlife, Aftermath, Amplify, Assemble, Assist, Aura Swap, Backup, Banding, Battle Cry, Blitz, Bloodthirst, Bolster, Bushido, Buyback, Cascade, Casualty, Champion, Cipher, Clash, Cloak, Companion, Compleated, Conspire, Convert, Cumulative Upkeep, Daybound and Nightbound, Decayed, Demonstrate, Detain, Dethrone, Devour, Discover, Disguise, Dredge, Echo, Embalm, Emerge, Encore, Enlist, Entwine, Epic, Escalate, Exalted, Exchange, Exploit, Extort, Fabricate, Face a Villainous Choice, Fateseal, Flanking, For Mirrodin!, Forecast, Foretell, Fortify, Freerunning, Frenzy, Fuse, Goad, Graft, Gravestorm, Hidden Agenda, Hideaway, Horsemanship, Increment, Incubate, Infect, Ingest, Intimidate, Jump-Start, Landwalk, Learn, Level Up, Living Metal, Madness, Meld, Melee, Mentor, Miracle, Modular, Monstrosity, More Than Meets the Eye, Morph, Mutate, Myriad, Offering, Open an Attraction, Outlast, Overload, Paradigm, Partner, Persist, Phasing, Planeswalk, Poisonous, Populate, Provoke, Prowl, Rampage, Ravenous, Reconfigure, Recover, Reinforce, Renown, Replicate, Retrace, Ripple, Roll to Visit Your Attractions, Scavenge, Set in Motion, Skulk, Soulbond, Soulshift, Space Sculptor, Spectacle, Splice, Squad, Sunburst, Support, Surge, Suspend, Teamwork, Time Travel, Training, Transfigure, Transmute, Tribute, Triple, Umbra Armor, Undaunted, Unearth, Unleash, Vanishing, Venture into the Dungeon, Visit, Vote, Web-slinging, Wither, ∞ (Infinity)
+Absorb, Adapt, Afflict, Afterlife, Aftermath, Amplify, Assemble, Assist, Aura Swap, Backup, Banding, Battle Cry, Blitz, Bloodthirst, Bolster, Bushido, Buyback, Cascade, Casualty, Champion, Cipher, Clash, Cloak, Companion, Compleated, Conspire, Convert, Cumulative Upkeep, Daybound and Nightbound, Decayed, Demonstrate, Detain, Dethrone, Devour, Discover, Disguise, Dredge, Echo, Embalm, Emerge, Encore, Enlist, Entwine, Epic, Escalate, Exalted, Exchange, Exploit, Extort, Fabricate, Face a Villainous Choice, Fateseal, Flanking, For Mirrodin!, Forecast, Foretell, Fortify, Freerunning, Frenzy, Fuse, Goad, Graft, Gravestorm, Hidden Agenda, Hideaway, Horsemanship, Increment, Incubate, Infect, Ingest, Intimidate, Jump-Start, Landwalk, Learn, Level Up, Living Metal, Madness, Meld, Melee, Mentor, Miracle, Modular, Monstrosity, More Than Meets the Eye, Morph, Mutate, Myriad, Offering, Open an Attraction, Outlast, Overload, Paradigm, Partner, Phasing, Planeswalk, Poisonous, Populate, Provoke, Prowl, Rampage, Ravenous, Reconfigure, Recover, Reinforce, Renown, Replicate, Retrace, Ripple, Roll to Visit Your Attractions, Scavenge, Set in Motion, Skulk, Soulbond, Soulshift, Space Sculptor, Spectacle, Splice, Squad, Sunburst, Support, Surge, Suspend, Teamwork, Time Travel, Training, Transfigure, Transmute, Tribute, Triple, Umbra Armor, Undaunted, Unearth, Unleash, Vanishing, Venture into the Dungeon, Visit, Vote, Wither, ∞ (Infinity)
