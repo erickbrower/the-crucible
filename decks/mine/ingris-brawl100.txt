@@ -26,11 +26,9 @@ Deck
 1 Curse-Marred Demon
 1 Ultimate Green Goblin
 1 Sandworm
-1 Laughing Mad
 1 Bonehoard Dracosaur
 1 Twinflame Tyrant
 1 Duel Tactics
-1 Dragon Fodder
 1 Obsessive Pursuit
 1 Shock
 1 Burst Lightning
@@ -77,3 +75,5 @@ Deck
 1 Command Tower
 13 Swamp
 13 Mountain
+1 Liliana the Repentant
+1 Burn, Burn, Tree and Fern
