@@ -38,7 +38,6 @@ Deck
 1 High Perfect Morcant (ECL) 229
 1 Bloodline Bidding (ECL) 91
 1 Awaken the Honored Dead (TDM) 170
-1 Three Steps Ahead (MAR) 62
 1 Elrond, Moon-Reader (HOB) 36
 1 Pick Your Poison (MKM) 170
 1 Opulent Palace (TDM) 264
@@ -47,3 +46,4 @@ Deck
 1 Evolving Wilds (FDN) 262
 1 Hedge Maze (MKM) 262
 1 Underground Mortuary (MKM) 271
+1 Dwynen, Gilt-Leaf Daen

@@ -10,7 +10,7 @@ Deck
 2 Authority of the Consuls (FIC) 232
 1 Temple of Silence (FDN) 704
 2 Vindictive Triumph
-1 Lich's Relic
+2 Lich's Relic
 2 Mortify (FDN) 662
 2 Moment of Craving (FDN) 524
 2 Sudden Strike (SPM) 19
@@ -19,5 +19,5 @@ Deck
 1 Gwenom, Remorseless (SPM) 56
 4 Scoured Barrens (FDN) 266
 1 Starfield Shepherd (EOE) 37
-2 Requisition Raid (OTJ) 26
+1 Requisition Raid
 1 Moment of Triumph (FDN) 500

@@ -37,9 +37,9 @@ Deck
 1 Lightning Helix (MKM) 218
 1 Cut In (WOE) 125
 1 Stroke of Midnight (FDN) 148
-1 Rabbit Response (BLB) 26
 1 Cavern of Souls (LCI) 269
 1 Temple of Triumph (FDN) 705
 1 Brightfield Glider (DFT) 4
 1 Convenient Target (MKM) 119
 1 Authority of the Consuls (FIC) 232
+1 Burn, Burn, Tree and Fern
