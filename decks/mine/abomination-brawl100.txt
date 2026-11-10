@@ -1,0 +1,79 @@
+Commander
+1 Abomination of Llanowar
+
+Deck
+1 Llanowar Elves
+1 Elvish Mystic
+1 Druid of the Cowl
+1 Woodland Mystic
+1 Priest of Titania
+1 Elvish Archdruid
+1 Bloom Tender
+1 Woodland Weavemaster
+1 Leaf-Crowned Visionary
+1 Morcant's Loyalist
+1 High Perfect Morcant
+1 Lathril, Blade of the Elves
+1 Tyvar, the Pummeler
+1 Harald, King of Skemfar
+1 Cantankerous Keepers
+1 Elvish Regrower
+1 Wardens of the Cycle
+1 Lluwen, Imperfect Naturalist
+1 Trystan, Callous Cultivator
+1 Kagha, Shadow Archdruid
+1 Gloom Ripper
+1 Dawnhand Eulogist
+1 Formidable Speaker
+1 Galion, Elvenking's Butler
+1 Boughside Wanderers
+1 Silhana Wayfinder
+1 Lys Alana Dignitary
+1 Mirkwood Pathmaker
+1 Overkill
+1 Greenwood Sentinel
+1 Infestation Sage
+1 Iron-Shield Elf
+1 Creakwood Safewright
+1 Selfless Safewright
+1 Rakish Scoundrel
+1 Stoic Grove-Guide
+1 Elfsworn Giant
+1 Allosaurus Shepherd
+1 Wood Elves
+1 Garruk, Veiled Butcher
+1 Graveshifter
+1 Three Tree Mascot
+1 Underrealm Lich
+1 Trystan's Command
+1 Unforgiving Aim
+1 Morcant's Eyes
+1 Murder
+1 Hero's Downfall
+1 Bitter Triumph
+1 Abrupt Decay
+1 Binding the Old Gods
+1 Bake into a Pie
+1 Bilbo's Deadly Slice
+1 Last Gasp
+1 Eaten Alive
+1 Tribute to Hunger
+1 Break Under Pressure
+1 Silence the Echo
+1 Extended Absence
+1 Gnashing of Teeth
+1 Vivien Reid
+1 Garruk, Curse Breaker
+1 Command Tower
+1 Jungle Hollow
+1 Golgari Guildgate
+1 Overgrown Tomb
+1 Underground Mortuary
+1 Temple of Malady
+1 Fabled Passage
+1 Evolving Wilds
+1 Cavern of Souls
+1 Multiversal Passage
+1 Eclipsed Realms
+15 Forest
+11 Swamp
