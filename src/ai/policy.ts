@@ -78,9 +78,45 @@ export function cardValue(g: Game, p: Player, card: CardInst): number {
   return v;
 }
 
+/** "Exile it, then return it to the battlefield" (now or at the next end step): a flicker, not removal. */
+export function isBlink(eff: Effect): boolean {
+  const P = eff.params;
+  if (eff.api !== 'ChangeZone' || !(P.Origin ?? 'Battlefield').includes('Battlefield') || P.Destination !== 'Exile') return false;
+  for (let e = eff.sub; e; e = e.sub) {
+    if (e.api === 'DelayedTrigger') return true;
+    if (e.api === 'ChangeZone' && e.params.Destination === 'Battlefield' && /Remembered/.test(e.params.Defined ?? '')) return true;
+  }
+  return false;
+}
+
+/** What re-running this permanent's "when this enters" triggers is worth to its controller. */
+export function blinkValue(g: Game, perm: Perm, me: number, eff?: Effect): number {
+  if (perm.token) return -5;                                     // a flickered token is gone for good
+  let v = 0;
+  for (const t of perm.def.triggers) {
+    if (t.mode !== 'ChangesZone' || t.params.Destination !== 'Battlefield' || !t.effect) continue;
+    if (!/Self|Creature\.YouCtrl|Creature\.Other\+YouCtrl/.test(t.params.ValidCard ?? '')) continue;
+    if (/Other/.test(t.params.ValidCard ?? '')) continue;          // "another creature enters": doesn't see itself
+    v += Math.max(1, effectScore(g, t.effect, { p: me, source: perm, x: 0, kicked: false, targets: [] }, 1));
+  }
+  if (!v) return 0.2;
+  // "return it at the beginning of the next end step": it misses combat in the meantime
+  let delayed = false;
+  for (let e = eff?.sub; e; e = e.sub) if (e.api === 'DelayedTrigger') delayed = true;
+  if (delayed && isCreature(perm)) {
+    const st = g.statsOf(perm);
+    if (g.active === me && (g.phase === 'main1' || g.phase === 'combat') && !perm.sick && !perm.tapped) v -= st.power * 1.2 + 0.5;   // can't attack
+    else if (g.active !== me && g.phase !== 'end') v -= permValue(g, perm) * 0.6;                                                   // can't block
+    else if (g.active !== me && g.phase === 'end') v -= st.power * 1.2 + 1;                                                         // gone through our whole turn
+  }
+  const counters = Object.entries(perm.counters).filter(([k]) => k === 'P1P1').reduce((a, [, n]) => a + n, 0);
+  return Math.min(30, v - counters * 1.5 - (g.bf.some(a => a.attachedTo === perm.id) ? 2 : 0));
+}
+
 export function isHarmful(eff: Effect): boolean {
   const P = eff.params;
   if (P.IsCurse === 'True' || P.AILogic === 'Curse') return true;
+  if (isBlink(eff)) return false;
   switch (eff.api) {
     case 'DealDamage': case 'Destroy': case 'Tap': case 'Counter': case 'Discard': case 'LoseLife': case 'Mill': case 'Fight':
       return true;
@@ -298,6 +334,7 @@ export function scoreTargets(g: Game, eff: Effect, ctx: Ctx): Scored[] {
     } else {
       // beneficial
       if (perm.controller !== me) s = -v;
+      else if (isBlink(eff)) s = blinkValue(g, perm, me, eff);
       else {
         s = v;
         if (eff.api === 'Attach') {

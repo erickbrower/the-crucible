@@ -313,6 +313,8 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       // "spells cost {N} more" (Thalia, Disruptor Flute)
     } else if (m === 'OptionalCost' && /^Blight<\d+>$/.test(params.Cost ?? '')) {
       // "as an additional cost to cast this spell, you may blight N"
+    } else if (m === 'Panharmonicon' && (params.Destination ?? 'Battlefield') === 'Battlefield') {
+      // "a permanent entering causes your triggers to trigger an additional time" (Starfield Vocalist)
     } else if (m === 'CantBeActivated' && /!ManaAbility/.test(params.ValidSA ?? '')) {
       // "can't be activated unless they're mana abilities"
     } else if (!['CantAttack', 'CantBlock', 'CantAttack,CantBlock', 'CantBlockBy', 'ReduceCost', 'CantBeCast', 'MustAttack', 'MinMaxBlocker', 'CantPreventDamage'].includes(m)) {
