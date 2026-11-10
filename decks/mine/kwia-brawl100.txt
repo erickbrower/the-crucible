@@ -37,7 +37,6 @@ Deck
 1 Valorous Stance
 1 Razor Rings
 1 Kapow!
-1 Make Your Move
 1 Overgrown Farmland
 1 Gathering Place
 1 Blossoming Sands
@@ -76,3 +75,4 @@ Deck
 1 Command Tower
 17 Plains
 10 Forest
+1 Solarium Sentry

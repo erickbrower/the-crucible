@@ -31,7 +31,6 @@ Deck
 1 Lys Alana Dignitary
 1 Mirkwood Pathmaker
 1 Overkill
-1 Greenwood Sentinel
 1 Infestation Sage
 1 Iron-Shield Elf
 1 Creakwood Safewright
@@ -59,7 +58,6 @@ Deck
 1 Eaten Alive
 1 Tribute to Hunger
 1 Break Under Pressure
-1 Silence the Echo
 1 Extended Absence
 1 Gnashing of Teeth
 1 Vivien Reid
@@ -77,3 +75,5 @@ Deck
 1 Eclipsed Realms
 15 Forest
 11 Swamp
+1 Dwynen, Gilt-Leaf Daen
+1 Tragic Trajectory
