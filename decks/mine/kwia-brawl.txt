@@ -17,14 +17,11 @@ Deck
 1 Dazzling Angel
 1 Bloombrute
 1 Titanbones, Towering Heart
-1 Greenhouse Propagator
 1 Llanowar Elves
 1 Scavenging Ooze
 1 Lyra Dawnbringer
 1 Thalia, the Survivor
 1 Essence Channeler
-1 Vanguard Seraph
-1 Migrating Ketradon
 1 Spider-Ham, Peter Porker
 1 Ajani Resolute
 1 Authority of the Consuls
@@ -35,7 +32,6 @@ Deck
 1 Felling Blow
 1 Troll Negotiations
 1 Valorous Stance
-1 Razor Rings
 1 Kapow!
 1 Overgrown Farmland
 1 Gathering Place
@@ -49,3 +45,7 @@ Deck
 9 Plains
 5 Forest
 1 Solarium Sentry
+1 Dr. Beverly Crusher
+1 Mugato
+1 Emergency Medical Hologram
+1 Captain Jean-Luc Picard

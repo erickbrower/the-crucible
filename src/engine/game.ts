@@ -114,7 +114,7 @@ export class Game {
     return {
       id, name: deck.name, life, library: lib, hand: [], graveyard: [], exile: [], command, landsPlayed: 0, commanderTax: 0,
       lost: false, identity: deck.commander ? deck.commander.colors.length ? [...identity] : [...identity] : COLORS, spellsThisTurn: 0,
-      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, lifeGainedThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
+      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, lifeGainedThisTurn: 0, lifeLostThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
       mulligans: 0, style,
     };
   }
@@ -190,7 +190,7 @@ export class Game {
   takeTurn(firstTurn: boolean) {
     const a = this.players[this.active];
     a.landsPlayed = 0; a.spellsThisTurn = 0; a.noncreatureSpellsThisTurn = 0; a.drawnThisTurn = 0;
-    for (const pl of this.players) { pl.lifeGainedThisTurn = 0; pl.discardedThisTurn = []; }
+    for (const pl of this.players) { pl.lifeGainedThisTurn = 0; pl.lifeLostThisTurn = 0; pl.discardedThisTurn = []; }
     a.attackedThisTurn = false;
     for (const pl of this.players) pl.creaturesDiedThisTurn = 0;
     for (const perm of this.bf) {
@@ -1697,6 +1697,7 @@ export class Game {
     if (n <= 0) return;
     this.speedUp(pid);
     this.players[pid].life -= n;
+    this.players[pid].lifeLostThisTurn += n;
     if (this.players[pid].life <= 0) this.lose(pid, 'life');
   }
 
@@ -1723,6 +1724,7 @@ export class Game {
     if (target.kind === 'player') {
       this.speedUp(target.pid);
       this.players[target.pid].life -= amount;
+      this.players[target.pid].lifeLostThisTurn += amount;
       this.stats.damage[controller] += amount;
       if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');
     } else if (target.kind === 'perm') {
@@ -1782,8 +1784,11 @@ export class Game {
       for (const trig of [...def.triggers, ...extra]) {
         if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev)) {
           // Panharmonicon-style statics (Starfield Vocalist): a permanent entering makes your triggers fire an additional time
-          const extraTimes = ev.type === 'zone' && ev.to === 'Battlefield' && /^ChangesZone/.test(trig.mode) && this.bf.includes(src as Perm)
-            ? this.bf.filter(x => x.controller === controller && x.def.statics.some(st => st.mode === 'Panharmonicon' && (st.params.Destination ?? 'Battlefield') === 'Battlefield')).length : 0;
+          const doublers = (mode: string) => this.bf.filter(x => x.controller === controller && x.def.statics.some(st => st.mode === 'Panharmonicon' && (st.params.ValidMode ?? '').split(',').includes(mode))).length;
+          const extraTimes = !this.bf.includes(src as Perm) ? 0
+            : ev.type === 'zone' && ev.to === 'Battlefield' && /^ChangesZone/.test(trig.mode) ? doublers('ChangesZone')
+            : ev.type === 'lifeGained' && ev.player === controller && trig.mode === 'LifeGained' ? doublers('LifeGained')   // Dr. Beverly Crusher
+            : 0;
           for (let k = 0; k <= extraTimes; k++) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
         }
       }
@@ -2273,6 +2278,16 @@ export class Game {
         const n = this.amount(P.LifeAmount, sub, def);
         const who = P.Defined ? defined() : [{ kind: 'player', pid: ctx.p } as Target];
         for (const t of who) if (t.kind === 'player') this.gainLife(t.pid, n);
+        break;
+      }
+      case 'RepeatEach': {
+        // Gul Dukat: "each opponent loses life equal to the life that player lost this turn. You gain that much."
+        const inner = def ? this.compileSVar(def, P.RepeatSubAbility) : undefined;
+        if (P.RepeatPlayers === 'Player.Opponent' && inner?.api === 'LoseLife' && /LifeLostThisTurn/.test(def?.svars?.[inner.params.LifeAmount] ?? '')) {
+          const opp = this.players[1 - ctx.p];
+          const n = opp.lifeLostThisTurn;
+          if (n > 0) { this.loseLife(opp.id, n); this.gainLife(ctx.p, n); this.trace(`${def?.name}: P${opp.id} loses ${n} more, P${ctx.p} gains ${n}`, ctx.p); }
+        }
         break;
       }
       case 'LoseLife': {

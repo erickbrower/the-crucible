@@ -106,7 +106,8 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
     return inner;
   }
   const eff: Effect = { api, params };
-  if (!SUPPORTED_APIS.has(api)) notes.push(`unsupported effect "${api}"`);
+  if (api === 'RepeatEach' && params.RepeatPlayers === 'Player.Opponent' && /LifeLostThisTurn/.test(face.svars[parseParams(face.svars[params.RepeatSubAbility] ?? '').LifeAmount] ?? '')) { /* Gul Dukat */ }
+  else if (!SUPPORTED_APIS.has(api)) notes.push(`unsupported effect "${api}"`);
   else if (IGNORED_APIS.has(api)) notes.push(`ignored effect "${api}"`);
   else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
@@ -313,7 +314,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       // "spells cost {N} more" (Thalia, Disruptor Flute)
     } else if (m === 'OptionalCost' && /^Blight<\d+>$/.test(params.Cost ?? '')) {
       // "as an additional cost to cast this spell, you may blight N"
-    } else if (m === 'Panharmonicon' && (params.Destination ?? 'Battlefield') === 'Battlefield') {
+    } else if (m === 'Panharmonicon' && /^(ChangesZone(,ChangesZoneAll)?|LifeGained)$/.test(params.ValidMode ?? '')) {
       // "a permanent entering causes your triggers to trigger an additional time" (Starfield Vocalist)
     } else if (m === 'CantBeActivated' && /!ManaAbility/.test(params.ValidSA ?? '')) {
       // "can't be activated unless they're mana abilities"

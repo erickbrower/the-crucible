@@ -19,7 +19,6 @@ Deck
 1 Bumi, Unleashed
 1 Beorn the Fierce
 1 Burst Lightning
-1 Affectionate Indrik
 1 Spider-Rex, Daring Dino
 1 Greenhouse Propagator
 1 Quilled Greatwurm
@@ -52,3 +51,4 @@ Deck
 7 Forest
 3 Mountain
 2 Plains
+1 Mugato

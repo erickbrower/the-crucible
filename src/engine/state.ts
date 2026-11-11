@@ -65,6 +65,7 @@ export interface Player {
   noncreatureSpellsThisTurn: number;
   drawnThisTurn: number;
   lifeGainedThisTurn: number;
+  lifeLostThisTurn: number;
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;
