@@ -36,7 +36,7 @@ Deck
 1 Daggerback Basilisk
 1 Deathbloom Gardener
 1 Walltop Sentries
-1 Trystan, Callous Cultivator
+1 Kraul Stinger
 1 Vastlands Scavenger
 1 Oakhame Adversary
 1 Toski, Bearer of Secrets

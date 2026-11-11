@@ -15,11 +15,11 @@ Deck
 1 Flesh Burrower
 1 Frog Butler
 1 Noxious Newt
-1 Sultai Devotee
+1 Sentinel of the Nameless City
 1 Thornweald Archer
 1 Venomsac Lagac
 1 Scavenging Ooze
-1 Trystan, Callous Cultivator
+1 Tarmogoyf
 1 Vastlands Scavenger
 1 Walltop Sentries
 1 Treetop Snarespinner
