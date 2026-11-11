@@ -7,7 +7,7 @@ const CARD_TYPES = ['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker
 const SUPERTYPES = ['Legendary', 'Basic', 'Snow', 'World'];
 
 /** Effect APIs the engine implements (fully or approximately). */
-export const SUPPORTED_APIS = new Set(['Play', 
+export const SUPPORTED_APIS = new Set(['Play', 'Poison', 
   'DealDamage', 'DamageAll', 'Destroy', 'DestroyAll', 'ChangeZone', 'ChangeZoneAll', 'Draw', 'Discard', 'Token',
   'Pump', 'PumpAll', 'PutCounter', 'PutCounterAll', 'Counter', 'GainLife', 'LoseLife', 'Mana', 'Scry', 'Surveil',
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
@@ -27,7 +27,7 @@ export const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
   'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending', 'MayEffectFromOpeningHand', 'Evoke', 'Delve',
-  'Escape', 'Mayhem', 'Bargain', 'Saddle', 'Tiered', 'Plot', 'Bestow', 'Craft',
+  'Escape', 'Mayhem', 'Bargain', 'Saddle', 'Tiered', 'Plot', 'Bestow', 'Craft', 'Toxic',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {

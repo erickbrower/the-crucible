@@ -114,7 +114,7 @@ export class Game {
     return {
       id, name: deck.name, life, library: lib, hand: [], graveyard: [], exile: [], command, landsPlayed: 0, commanderTax: 0,
       lost: false, identity: deck.commander ? deck.commander.colors.length ? [...identity] : [...identity] : COLORS, spellsThisTurn: 0,
-      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, lifeGainedThisTurn: 0, lifeLostThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
+      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, poison: 0, lifeGainedThisTurn: 0, lifeLostThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
       mulligans: 0, style,
     };
   }
@@ -1693,6 +1693,36 @@ export class Game {
     this.trace(`speed ${me.speed}${me.speed === 4 ? ' (max speed)' : ''}`, me.id);
   }
 
+  /** Ten or more poison counters loses the game. */
+  addPoison(pid: number, n: number) {
+    if (n <= 0 || this.over) return;
+    const pl = this.players[pid];
+    pl.poison += n;
+    this.trace(`P${pid} gets ${n} poison (${pl.poison})`, this.opp(pid));
+    if (pl.poison >= 10) this.lose(pid, 'poison');
+  }
+
+  /** Total Toxic N on a permanent (printed keywords carry their number, e.g. "Toxic:1"). */
+  toxic(perm: Perm): number {
+    let n = 0;
+    for (const k of [...perm.def.keywords, ...perm.tempKw]) { const m = /^Toxic:?\s*(\d+)/.exec(k); if (m) n += +m[1]; }
+    return n;
+  }
+
+  /** Poison counters this attacker would give its controller's opponent on a combat hit (Fynn-style triggers, Toxic). */
+  poisonOnHit(a: Perm): number {
+    let n = 0;
+    n += this.toxic(a);
+    for (const src of this.bf) {
+      if (src.controller !== a.controller) continue;
+      for (const t of src.def.triggers) {
+        if (!/^DamageDone/.test(t.mode) || t.params.CombatDamage !== 'True' || t.effect?.api !== 'Poison' || !/Player/.test(t.params.ValidTarget ?? '')) continue;
+        if (matches(t.params.ValidSource ?? 'Card.Self', this.subjectOf(a), { you: src.controller, sourceId: src.id })) n += Math.max(1, +(t.effect.params.Num ?? 1) || 1);
+      }
+    }
+    return n;
+  }
+
   loseLife(pid: number, n: number) {
     if (n <= 0) return;
     this.speedUp(pid);
@@ -1726,6 +1756,10 @@ export class Game {
       this.players[target.pid].life -= amount;
       this.players[target.pid].lifeLostThisTurn += amount;
       this.stats.damage[controller] += amount;
+      if (combat && source && this.bf.includes(source as Perm)) {
+        const toxic = this.toxic(source as Perm);
+        if (toxic) this.addPoison(target.pid, toxic);
+      }
       if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');
     } else if (target.kind === 'perm') {
       const t = target.perm;
@@ -2272,6 +2306,12 @@ export class Game {
           t.item.countered = true;
           if (P.RememberCounteredCMC) ctx.rememberedNumber = sub.rememberedNumber = t.item.card.def.mv;
         }
+        break;
+      }
+      case 'Poison': {
+        const n = this.amount(P.Num ?? '1', sub, def);
+        const who = P.Defined ? defined() : needsTargets ? targets : [{ kind: 'player' as const, pid: this.opp(ctx.p) }];
+        for (const t of who) if (t.kind === 'player') this.addPoison(t.pid, n);
         break;
       }
       case 'GainLife': {

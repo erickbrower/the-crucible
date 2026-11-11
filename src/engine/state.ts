@@ -52,6 +52,7 @@ export interface Player {
   id: number;
   name: string;
   life: number;
+  poison: number;
   library: CardInst[];
   hand: CardInst[];
   graveyard: CardInst[];

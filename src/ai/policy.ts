@@ -1322,6 +1322,9 @@ export function chooseAttackers(g: Game, p: Player): Perm[] {
   const soak = Math.min(blockers.length, powers.length);
   const through = powers.slice(soak).reduce((a, b) => a + b, 0);
   if (through >= opp.life) return mine;
+  // ...or if enough poisonous attackers get past their blockers to reach ten counters
+  const venom = mine.map(x => g.poisonOnHit(x)).filter(n => n > 0).sort((a, b) => a - b);
+  if (venom.length && opp.poison + venom.slice(0, Math.max(0, venom.length - blockers.length)).reduce((a, b) => a + b, 0) >= 10) return mine;
   // keep enough defenders home if their crack-back would be lethal
   const theirPower = myCreatures(g, opp.id).map(x => Math.max(0, g.statsOf(x).power)).sort((a, b) => b - a);
   let threat = theirPower.reduce((a, b) => a + b, 0);
@@ -1352,13 +1355,30 @@ export function chooseBlocks(g: Game, defender: Player, attackers: Perm[]): Map<
     const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).map(b => ({ b, r: duel(g, a, b), v: permValue(g, b) }));
     if (!opts.length) continue;
     const good = opts.filter(o => o.r.blockerKills && !o.r.blockerDies).sort((x, y) => x.v - y.v)[0];
-    const trade = opts.filter(o => o.r.blockerKills && o.r.blockerDies && permValue(g, a) >= o.v - (defender.style === 'control' ? 1 : 0.3)).sort((x, y) => x.v - y.v)[0];
+    // a poisonous attacker is worth stopping even at the cost of a better creature, more so the closer we are to ten counters
+    const venomBonus = g.poisonOnHit(a) * (0.6 + defender.poison * 0.2);
+    const trade = opts.filter(o => o.r.blockerKills && o.r.blockerDies && permValue(g, a) + venomBonus >= o.v - (defender.style === 'control' ? 1 : 0.3)).sort((x, y) => x.v - y.v)[0];
     const safe = opts.filter(o => !o.r.blockerDies).sort((x, y) => x.v - y.v)[0];
     const pick = good ?? trade ?? safe;
     if (pick) {
       blocks.set(a, [pick.b]); used.add(pick.b);
       const trampleOver = g.has(a, 'Trample') ? Math.max(0, pw(a) - g.statsOf(pick.b).toughness) : 0;
       incoming -= pw(a) - trampleOver;
+    }
+  }
+  // chump poisonous attackers if the counters would finish us
+  {
+    const unblockedPoison = () => sorted.filter(a => !blocks.has(a)).reduce((s, a) => s + g.poisonOnHit(a), 0);
+    for (const a of [...sorted].sort((x, y) => g.poisonOnHit(y) - g.poisonOnHit(x))) {
+      if (defender.poison + unblockedPoison() < 10) break;
+      if (blocks.has(a) || !g.poisonOnHit(a)) continue;
+      const need = g.minBlockers(a);
+      if (need > g.maxBlockers(a)) continue;
+      const opts = avail.filter(b => !used.has(b) && canBlock(g, b, a)).sort((x, y) => permValue(g, x) - permValue(g, y));
+      if (opts.length < need) continue;
+      const bs = opts.slice(0, need);
+      blocks.set(a, bs); bs.forEach(b => used.add(b));
+      incoming -= pw(a);
     }
   }
   // chump if we would otherwise die
