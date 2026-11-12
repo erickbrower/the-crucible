@@ -7,7 +7,7 @@ const CARD_TYPES = ['Creature', 'Artifact', 'Enchantment', 'Land', 'Planeswalker
 const SUPERTYPES = ['Legendary', 'Basic', 'Snow', 'World'];
 
 /** Effect APIs the engine implements (fully or approximately). */
-export const SUPPORTED_APIS = new Set(['Play', 
+export const SUPPORTED_APIS = new Set(['Play', 'Poison', 
   'DealDamage', 'DamageAll', 'Destroy', 'DestroyAll', 'ChangeZone', 'ChangeZoneAll', 'Draw', 'Discard', 'Token',
   'Pump', 'PumpAll', 'PutCounter', 'PutCounterAll', 'Counter', 'GainLife', 'LoseLife', 'Mana', 'Scry', 'Surveil',
   'Mill', 'Sacrifice', 'Fight', 'Tap', 'TapAll', 'Untap', 'Attach', 'Charm', 'Dig', 'SetState', 'Explore',
@@ -27,7 +27,7 @@ export const SUPPORTED_KEYWORDS = new Set([
   'Flying', 'Reach', 'Trample', 'Haste', 'Vigilance', 'Deathtouch', 'Lifelink', 'First Strike', 'Double Strike',
   'Menace', 'Defender', 'Flash', 'Prowess', 'Hexproof', 'Indestructible', 'Kicker', 'Enchant', 'Ward', 'Equip',
   'Affinity', 'AlternateAdditionalCost', 'Chapter', 'Firebending', 'Ninjutsu', 'Sneak', 'Changeling', 'Cycling', 'TypeCycling', 'Flashback', 'Convoke', 'Crew', 'Start your engines', 'Warp', 'Station', 'Spree', 'Gift', 'ETBReplacement', 'Shroud', 'Can\'t be blocked', 'Offspring', 'Mobilize', 'Impending', 'MayEffectFromOpeningHand', 'Evoke', 'Delve',
-  'Escape', 'Mayhem', 'Bargain', 'Saddle', 'Tiered', 'Plot', 'Bestow', 'Craft',
+  'Escape', 'Mayhem', 'Bargain', 'Saddle', 'Tiered', 'Plot', 'Bestow', 'Craft', 'Toxic',
 ]);
 
 export function parseManaCost(s: string | undefined): ManaCost {
@@ -106,7 +106,8 @@ export function compileEffect(face: RawFace, text: string, notes: string[], dept
     return inner;
   }
   const eff: Effect = { api, params };
-  if (!SUPPORTED_APIS.has(api)) notes.push(`unsupported effect "${api}"`);
+  if (api === 'RepeatEach' && params.RepeatPlayers === 'Player.Opponent' && /LifeLostThisTurn/.test(face.svars[parseParams(face.svars[params.RepeatSubAbility] ?? '').LifeAmount] ?? '')) { /* Gul Dukat */ }
+  else if (!SUPPORTED_APIS.has(api)) notes.push(`unsupported effect "${api}"`);
   else if (IGNORED_APIS.has(api)) notes.push(`ignored effect "${api}"`);
   else if (api === 'Effect') { notes.push(...effectGaps(face, params)); eff.svars = face.svars; }
   else if (api === 'ChooseCard' && !/IsRemembered/.test(params.Choices ?? '')) notes.push('ignored effect "ChooseCard"');
@@ -313,7 +314,7 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
       // "spells cost {N} more" (Thalia, Disruptor Flute)
     } else if (m === 'OptionalCost' && /^Blight<\d+>$/.test(params.Cost ?? '')) {
       // "as an additional cost to cast this spell, you may blight N"
-    } else if (m === 'Panharmonicon' && (params.Destination ?? 'Battlefield') === 'Battlefield') {
+    } else if (m === 'Panharmonicon' && /^(ChangesZone(,ChangesZoneAll)?|LifeGained)$/.test(params.ValidMode ?? '')) {
       // "a permanent entering causes your triggers to trigger an additional time" (Starfield Vocalist)
     } else if (m === 'CantBeActivated' && /!ManaAbility/.test(params.ValidSA ?? '')) {
       // "can't be activated unless they're mana abilities"

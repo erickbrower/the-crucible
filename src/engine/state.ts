@@ -52,6 +52,7 @@ export interface Player {
   id: number;
   name: string;
   life: number;
+  poison: number;
   library: CardInst[];
   hand: CardInst[];
   graveyard: CardInst[];
@@ -65,6 +66,7 @@ export interface Player {
   noncreatureSpellsThisTurn: number;
   drawnThisTurn: number;
   lifeGainedThisTurn: number;
+  lifeLostThisTurn: number;
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;

@@ -114,7 +114,7 @@ export class Game {
     return {
       id, name: deck.name, life, library: lib, hand: [], graveyard: [], exile: [], command, landsPlayed: 0, commanderTax: 0,
       lost: false, identity: deck.commander ? deck.commander.colors.length ? [...identity] : [...identity] : COLORS, spellsThisTurn: 0,
-      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, lifeGainedThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
+      noncreatureSpellsThisTurn: 0, drawnThisTurn: 0, poison: 0, lifeGainedThisTurn: 0, lifeLostThisTurn: 0, attackedThisTurn: false, creaturesDiedThisTurn: 0,
       mulligans: 0, style,
     };
   }
@@ -190,7 +190,7 @@ export class Game {
   takeTurn(firstTurn: boolean) {
     const a = this.players[this.active];
     a.landsPlayed = 0; a.spellsThisTurn = 0; a.noncreatureSpellsThisTurn = 0; a.drawnThisTurn = 0;
-    for (const pl of this.players) { pl.lifeGainedThisTurn = 0; pl.discardedThisTurn = []; }
+    for (const pl of this.players) { pl.lifeGainedThisTurn = 0; pl.lifeLostThisTurn = 0; pl.discardedThisTurn = []; }
     a.attackedThisTurn = false;
     for (const pl of this.players) pl.creaturesDiedThisTurn = 0;
     for (const perm of this.bf) {
@@ -1693,10 +1693,41 @@ export class Game {
     this.trace(`speed ${me.speed}${me.speed === 4 ? ' (max speed)' : ''}`, me.id);
   }
 
+  /** Ten or more poison counters loses the game. */
+  addPoison(pid: number, n: number) {
+    if (n <= 0 || this.over) return;
+    const pl = this.players[pid];
+    pl.poison += n;
+    this.trace(`P${pid} gets ${n} poison (${pl.poison})`, this.opp(pid));
+    if (pl.poison >= 10) this.lose(pid, 'poison');
+  }
+
+  /** Total Toxic N on a permanent (printed keywords carry their number, e.g. "Toxic:1"). */
+  toxic(perm: Perm): number {
+    let n = 0;
+    for (const k of [...perm.def.keywords, ...perm.tempKw]) { const m = /^Toxic:?\s*(\d+)/.exec(k); if (m) n += +m[1]; }
+    return n;
+  }
+
+  /** Poison counters this attacker would give its controller's opponent on a combat hit (Fynn-style triggers, Toxic). */
+  poisonOnHit(a: Perm): number {
+    let n = 0;
+    n += this.toxic(a);
+    for (const src of this.bf) {
+      if (src.controller !== a.controller) continue;
+      for (const t of src.def.triggers) {
+        if (!/^DamageDone/.test(t.mode) || t.params.CombatDamage !== 'True' || t.effect?.api !== 'Poison' || !/Player/.test(t.params.ValidTarget ?? '')) continue;
+        if (matches(t.params.ValidSource ?? 'Card.Self', this.subjectOf(a), { you: src.controller, sourceId: src.id })) n += Math.max(1, +(t.effect.params.Num ?? 1) || 1);
+      }
+    }
+    return n;
+  }
+
   loseLife(pid: number, n: number) {
     if (n <= 0) return;
     this.speedUp(pid);
     this.players[pid].life -= n;
+    this.players[pid].lifeLostThisTurn += n;
     if (this.players[pid].life <= 0) this.lose(pid, 'life');
   }
 
@@ -1723,7 +1754,12 @@ export class Game {
     if (target.kind === 'player') {
       this.speedUp(target.pid);
       this.players[target.pid].life -= amount;
+      this.players[target.pid].lifeLostThisTurn += amount;
       this.stats.damage[controller] += amount;
+      if (combat && source && this.bf.includes(source as Perm)) {
+        const toxic = this.toxic(source as Perm);
+        if (toxic) this.addPoison(target.pid, toxic);
+      }
       if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');
     } else if (target.kind === 'perm') {
       const t = target.perm;
@@ -1782,8 +1818,11 @@ export class Game {
       for (const trig of [...def.triggers, ...extra]) {
         if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev)) {
           // Panharmonicon-style statics (Starfield Vocalist): a permanent entering makes your triggers fire an additional time
-          const extraTimes = ev.type === 'zone' && ev.to === 'Battlefield' && /^ChangesZone/.test(trig.mode) && this.bf.includes(src as Perm)
-            ? this.bf.filter(x => x.controller === controller && x.def.statics.some(st => st.mode === 'Panharmonicon' && (st.params.Destination ?? 'Battlefield') === 'Battlefield')).length : 0;
+          const doublers = (mode: string) => this.bf.filter(x => x.controller === controller && x.def.statics.some(st => st.mode === 'Panharmonicon' && (st.params.ValidMode ?? '').split(',').includes(mode))).length;
+          const extraTimes = !this.bf.includes(src as Perm) ? 0
+            : ev.type === 'zone' && ev.to === 'Battlefield' && /^ChangesZone/.test(trig.mode) ? doublers('ChangesZone')
+            : ev.type === 'lifeGained' && ev.player === controller && trig.mode === 'LifeGained' ? doublers('LifeGained')   // Dr. Beverly Crusher
+            : 0;
           for (let k = 0; k <= extraTimes; k++) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
         }
       }
@@ -2269,10 +2308,26 @@ export class Game {
         }
         break;
       }
+      case 'Poison': {
+        const n = this.amount(P.Num ?? '1', sub, def);
+        const who = P.Defined ? defined() : needsTargets ? targets : [{ kind: 'player' as const, pid: this.opp(ctx.p) }];
+        for (const t of who) if (t.kind === 'player') this.addPoison(t.pid, n);
+        break;
+      }
       case 'GainLife': {
         const n = this.amount(P.LifeAmount, sub, def);
         const who = P.Defined ? defined() : [{ kind: 'player', pid: ctx.p } as Target];
         for (const t of who) if (t.kind === 'player') this.gainLife(t.pid, n);
+        break;
+      }
+      case 'RepeatEach': {
+        // Gul Dukat: "each opponent loses life equal to the life that player lost this turn. You gain that much."
+        const inner = def ? this.compileSVar(def, P.RepeatSubAbility) : undefined;
+        if (P.RepeatPlayers === 'Player.Opponent' && inner?.api === 'LoseLife' && /LifeLostThisTurn/.test(def?.svars?.[inner.params.LifeAmount] ?? '')) {
+          const opp = this.players[1 - ctx.p];
+          const n = opp.lifeLostThisTurn;
+          if (n > 0) { this.loseLife(opp.id, n); this.gainLife(ctx.p, n); this.trace(`${def?.name}: P${opp.id} loses ${n} more, P${ctx.p} gains ${n}`, ctx.p); }
+        }
         break;
       }
       case 'LoseLife': {
