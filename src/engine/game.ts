@@ -82,12 +82,12 @@ export class Game {
   log: string[] = [];
   stack: StackItem[] = [];
   /** Delayed triggers ("at the beginning of your next main phase", "the next spell you cast this turn"). One-shot. */
-  delayed: { trig: Trigger; controller: number; source?: Perm | CardInst; untilSeq: number; number?: number; persistent?: boolean }[] = [];
+  delayed: { trig: Trigger; controller: number; source?: Perm | CardInst; untilSeq: number; number?: number; persistent?: boolean; remembered?: CardInst[] }[] = [];
   /** Additional combat phases still to come this turn, each with an optional effect that runs as it begins. */
   extraCombats: { eff?: Effect; ctx?: Ctx }[] = [];
   opts: GameOptions;
   phase = 'setup';
-  pendingTriggers: { trig: Trigger; perm: Perm | CardInst; controller: number; event: GEvent; number?: number }[] = [];
+  pendingTriggers: { trig: Trigger; perm: Perm | CardInst; controller: number; event: GEvent; number?: number; remembered?: CardInst[] }[] = [];
   resolvingDepth = 0;
   inPriority = false;              // true while the priority loop is running (responses just push)
   stats = { damage: [0, 0], cast: [0, 0], countered: [0, 0], fizzled: [0, 0], commanderCasts: [0, 0], drawn: [0, 0], turnsWithVenom: [0, 0] };
@@ -1780,8 +1780,12 @@ export class Game {
       if (!def.triggers.length && !extra.length && !def.keywords.some(k => k.startsWith('Mobilize'))) continue;
       const controller = (src as Perm).controller ?? src.owner;
       for (const trig of [...def.triggers, ...extra]) {
-        if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev))
-          this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+        if (this.triggerMatches(trig, src, controller, ev) && this.staticConditionMet(src, trig.params, controller) && this.triggerLimitsOk(trig, src, controller, ev)) {
+          // Panharmonicon-style statics (Starfield Vocalist): a permanent entering makes your triggers fire an additional time
+          const extraTimes = ev.type === 'zone' && ev.to === 'Battlefield' && /^ChangesZone/.test(trig.mode) && this.bf.includes(src as Perm)
+            ? this.bf.filter(x => x.controller === controller && x.def.statics.some(st => st.mode === 'Panharmonicon' && (st.params.Destination ?? 'Battlefield') === 'Battlefield')).length : 0;
+          for (let k = 0; k <= extraTimes; k++) this.pendingTriggers.push({ trig, perm: src, controller, event: ev });
+        }
       }
     }
     // delayed triggers (one-shot)
@@ -1790,7 +1794,7 @@ export class Game {
       if (!this.delayedMatches(dt.trig, dt.controller, ev)) continue;
       if (!dt.persistent) this.delayed.splice(this.delayed.indexOf(dt), 1);
       const fake: CardInst = dt.source ?? { id: -1, def: { ...(this.players[dt.controller].command[0]?.def ?? ({} as CardDef)), triggers: [] }, owner: dt.controller };
-      this.pendingTriggers.push({ trig: dt.trig, perm: fake, controller: dt.controller, event: ev, number: dt.number });
+      this.pendingTriggers.push({ trig: dt.trig, perm: fake, controller: dt.controller, event: ev, number: dt.number, remembered: dt.remembered });
     }
     // Firebending N: add {R} N times, until end of combat
     if (ev.type === 'attacks') {
@@ -2046,7 +2050,7 @@ export class Game {
       const rkey = `${this.turnSeq}:${t.perm.id}:${t.perm.def.triggers.indexOf(t.trig)}`;
       const resolvedThisTurn = (this.resolvedCounts.get(rkey) ?? 0) + 1;
       this.resolvedCounts.set(rkey, resolvedThisTurn);
-      this.resolveEffect(t.trig.effect, { p: t.controller, source: src ?? (t.perm as Perm), x: 0, kicked: false, targets: [], triggered, resolvedThisTurn, rememberedNumber: t.number });
+      this.resolveEffect(t.trig.effect, { p: t.controller, source: src ?? (t.perm as Perm), x: 0, kicked: false, targets: [], triggered, resolvedThisTurn, rememberedNumber: t.number, remembered: t.remembered ? [...t.remembered] : undefined });
       this.checkSBA();
     }
     this.resolvingDepth--;
@@ -2475,7 +2479,8 @@ export class Game {
         const exec = def ? this.compileSVar(def, P.Execute ?? '') : undefined;
         if (!exec) break;
         this.delayed.push({ trig: { mode: P.Mode, params: P, effect: exec }, controller: ctx.p, source: ctx.source ?? ctx.card,
-          untilSeq: P.ThisTurn === 'True' ? this.turnSeq : Infinity, number: P.RememberNumber ? ctx.rememberedNumber : undefined });
+          untilSeq: P.ThisTurn === 'True' ? this.turnSeq : Infinity, number: P.RememberNumber ? ctx.rememberedNumber : undefined,
+          remembered: P.RememberObjects && /Remembered/.test(P.RememberObjects) ? [...(ctx.remembered ?? [])] : undefined });
         break;
       }
       case 'ChooseType': {
@@ -2639,6 +2644,19 @@ export class Game {
     const origin = P.Origin ?? 'Battlefield';
     const dest = P.Destination ?? 'Hand';
     const pl = this.players[ctx.p];
+    if (/Remembered/.test(P.Defined ?? '') && dest === 'Battlefield' && (origin === 'All' || origin === 'Any' || origin.includes('Exile'))) {
+      // flicker: "return that card to the battlefield" (Daydream, Kykar, Ennis)
+      for (const c of [...(ctx.remembered ?? [])]) {
+        const owner = this.players[c.owner];
+        const i = owner.exile.indexOf(c);
+        if (i < 0) continue;
+        owner.exile.splice(i, 1);
+        const np = this.enter(c, c.owner, { tapped: P.Tapped === 'True' });
+        if (P.WithCountersType) this.addCounters(np, P.WithCountersType, Math.max(1, +(P.WithCountersAmount ?? 1)));
+        this.trace(`${c.def.name} returns to the battlefield`, c.owner);
+      }
+      return;
+    }
     if (origin === 'Battlefield' && dest === 'Exile' && !P.Defined && !tg.length && eff.sub?.params.Transformed === 'True'
       && ctx.source?.def.back && this.bf.includes(ctx.source)) {
       // "Exile X, then return it to the battlefield transformed": a new object with the back face
@@ -2665,6 +2683,11 @@ export class Game {
         }
         const perm = t.perm;
         this.leave(perm, destKey as 'exile');
+        if (P.RememberChanged && !perm.token) {
+          const zone = destKey === 'exile' ? this.players[perm.owner].exile : destKey === 'graveyard' ? this.players[perm.owner].graveyard : destKey === 'hand' ? this.players[perm.owner].hand : [];
+          const card = zone.find(c => c.id === perm.id);
+          if (card) ctx.remembered!.push(card);
+        }
         if (destKey === 'exile' && P.Duration === 'UntilHostLeavesPlay' && ctx.source && this.bf.includes(ctx.source) && !perm.token) {
           const owner = this.players[perm.owner];
           const card = owner.exile.find(c => c.id === perm.id);
@@ -2703,9 +2726,11 @@ export class Game {
         else if (destKey === 'exile') owner.exile.push(t.card);
         else owner.library.unshift(t.card);
       }
-      if (!tg.length && origin === 'Hand' && !P.Defined && destKey !== 'battlefield') {
+      if (!tg.some(t => t.kind !== 'player') && origin === 'Hand' && !P.Defined && destKey !== 'battlefield') {
         // "look at target opponent's hand, exile a nonland card from it" (Deep-Cavern Bat, Kitesail Freebooter)
-        const who = P.DefinedPlayer ? this.defined(P.DefinedPlayer, ctx).flatMap(t => t.kind === 'player' ? [this.players[t.pid]] : []) : [pl];
+        const targetedPlayers = tg.flatMap(t => t.kind === 'player' ? [this.players[t.pid]] : []);
+        const who = P.DefinedPlayer ? this.defined(P.DefinedPlayer, ctx).flatMap(t => t.kind === 'player' ? [this.players[t.pid]] : [])
+          : targetedPlayers.length ? targetedPlayers : [pl];
         const n = P.ChangeNum ? Math.max(1, this.amount(P.ChangeNum, ctx)) : 1;
         for (const victim of who) for (let i = 0; i < n; i++) {
           const opts = victim.hand.filter(c => matches(P.ChangeType ?? 'Card', this.subjectOf(c, victim.id), { you: ctx.p }));
