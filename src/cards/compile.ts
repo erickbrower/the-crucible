@@ -329,6 +329,8 @@ function compileFace(face: RawFace, opts: { token?: boolean } = {}): CardDef {
     if (r.Event === 'Moved' && (r.ReplaceWith ?? '').toLowerCase().includes('tap')) continue;
     // "if you would gain life, you gain that much life plus 1 instead" is applied by the engine
     if (r.Event === 'GainLife' && /you gain that much life plus 1 instead/i.test(face.get('Oracle') ?? '')) continue;
+    // "you don't lose the game for having 0 or less life" (Georgiou) is checked by the engine
+    if (r.Event === 'GameLoss' && r.ValidLoseReason === 'LifeReachedZero' && r.ValidPlayer === 'You') continue;
     notes.push(`replacement "${r.Event}" ignored`);
   }
   const def: CardDef = {
