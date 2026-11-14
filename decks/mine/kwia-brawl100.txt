@@ -24,7 +24,6 @@ Deck
 1 Thalia, the Survivor
 1 Felidar Savior
 1 Vanguard Seraph
-1 Migrating Ketradon
 1 Spider-Ham, Peter Porker
 1 Ajani Resolute
 1 Authority of the Consuls
@@ -76,3 +75,4 @@ Deck
 17 Plains
 10 Forest
 1 Solarium Sentry
+1 Jadzia Dax, Living Legacy

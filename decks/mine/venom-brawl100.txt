@@ -48,7 +48,6 @@ Deck
 1 Abrade
 1 Abrupt Decay
 1 Deadly Dispute
-1 Farseek
 1 Feed the Swarm
 1 Bilbo's Deadly Slice
 1 Cultivate
@@ -86,3 +85,4 @@ Deck
 1 Sheoldred, the Apocalypse
 1 Resistance Is Futile
 1 Mugato
+1 Jadzia Dax, Living Legacy
