@@ -1693,6 +1693,11 @@ export class Game {
     this.trace(`speed ${me.speed}${me.speed === 4 ? ' (max speed)' : ''}`, me.id);
   }
 
+  /** Georgiou, Terran Emperor: "You don't lose the game for having 0 or less life." */
+  cantLoseForLife(pid: number): boolean {
+    return this.bf.some(x => x.controller === pid && (x.def.replacements ?? []).some(r => r.Event === 'GameLoss' && r.ValidLoseReason === 'LifeReachedZero' && r.ValidPlayer === 'You'));
+  }
+
   /** Ten or more poison counters loses the game. */
   addPoison(pid: number, n: number) {
     if (n <= 0 || this.over) return;
@@ -1728,7 +1733,7 @@ export class Game {
     this.speedUp(pid);
     this.players[pid].life -= n;
     this.players[pid].lifeLostThisTurn += n;
-    if (this.players[pid].life <= 0) this.lose(pid, 'life');
+    if (this.players[pid].life <= 0 && !this.cantLoseForLife(pid)) this.lose(pid, 'life');
   }
 
   dealDamage(source: Perm | CardInst | undefined, controller: number, target: Target, amount: number, combat: boolean) {
@@ -1760,7 +1765,7 @@ export class Game {
         const toxic = this.toxic(source as Perm);
         if (toxic) this.addPoison(target.pid, toxic);
       }
-      if (this.players[target.pid].life <= 0) this.lose(target.pid, 'damage');
+      if (this.players[target.pid].life <= 0 && !this.cantLoseForLife(target.pid)) this.lose(target.pid, 'damage');
     } else if (target.kind === 'perm') {
       const t = target.perm;
       if (!this.bf.includes(t)) return 0;
@@ -1798,7 +1803,7 @@ export class Game {
           changed = true;
         }
       }
-      for (const pl of this.players) if (pl.life <= 0) this.lose(pl.id, 'life');
+      for (const pl of this.players) if (pl.life <= 0 && !this.cantLoseForLife(pl.id)) this.lose(pl.id, 'life');
       if (changed) this.resolveTriggers();
     }
   }

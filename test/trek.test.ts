@@ -31,3 +31,25 @@ d('Dr. Beverly Crusher', () => {
     expect(g.players[0].hand.length).toBe(before);   // -Hunter, +1 card (not +2)
   });
 });
+
+d('Georgiou, Terran Emperor', () => {
+  it("you don't lose at 0 life while she's out, and lose as soon as she leaves", () => {
+    const g = setup({ bf: ['Georgiou, Terran Emperor'] });
+    g.players[0].life = 2;
+    g.loseLife(0, 5);
+    g.checkSBA();
+    expect(g.over).toBe(false);
+    g.destroy(g.bf.find(x => x.def.name === 'Georgiou, Terran Emperor')!);
+    g.checkSBA();
+    expect(g.over).toBe(true);
+    expect(g.winner).toBe(1);
+  });
+
+  it('at 0 or less life her end step trigger makes ten Officers', () => {
+    const g = setup({ bf: ['Georgiou, Terran Emperor'], library: Array(5).fill('Swamp') });
+    g.players[0].life = 2;
+    g.emit({ type: 'phase', phase: 'End of Turn', player: 0 });
+    expect(g.players[0].life).toBe(-1);
+    expect(g.bf.filter(x => x.token && x.controller === 0).length).toBe(10);
+  });
+});

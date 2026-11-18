@@ -12,7 +12,6 @@ Deck
 4 Wrath of the Bloodmane (FRA) 96
 4 Burst Lightning
 1 Stingerquill Charm (FRA) 150
-1 Lich's Relic (FRA) 57
 4 Bloodfell Caves
 4 Ominous Asylum
 1 Blood Crypt
@@ -21,3 +20,4 @@ Deck
 7 Swamp
 5 Mountain
 1 Khan, Vengeful Heart
+1 Georgiou, Terran Emperor

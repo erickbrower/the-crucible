@@ -7,7 +7,7 @@ Deck
 2 Moseo, Vein's New Dean
 2 Preacher of the Schism
 3 Vraska, the Cutting Glare
-2 Professional Wrestler
+1 Professional Wrestler
 1 The Sackville-Bagginses
 2 Requiting Hex
 2 Hero's Downfall
@@ -24,3 +24,4 @@ Deck
 1 Fabled Passage
 9 Swamp
 5 Forest
+1 Georgiou, Terran Emperor
