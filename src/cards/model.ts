@@ -22,6 +22,7 @@ export interface Effect {
   sub?: Effect;                        // SubAbility chain
   choices?: Effect[];                  // Charm modes
   svars?: Record<string, string>;      // the card's SVars, kept on "Effect" abilities that refer to their own statics
+  grantedTriggers?: Trigger[];         // Animate: triggered abilities the permanent gains (Hive of the Eye Tyrant)
 }
 
 export interface Cost {
@@ -34,6 +35,8 @@ export interface Cost {
   loyalty?: number;                    // +N / -N for planeswalker abilities
   blight?: number;                     // put N -1/-1 counters on a creature you control
   tapType?: { n: number; filter: string };   // tap N untapped creatures of a kind you control
+  exileGrave?: { n: number; filter: string };  // exile N cards of a kind from your graveyard (Graveyard Marshal)
+  discardX?: boolean;                  // discard X cards, where X is chosen on activation (Gix)
   supported: boolean;
 }
 
@@ -82,6 +85,8 @@ export interface CardDef {
   land?: LandInfo;
   notes: string[];        // coverage notes: things the engine ignores or approximates
   back?: CardDef;         // transformed face (SetState Transform)
+  adventure?: CardDef;    // adventure half (Murderous Rider's Swift End): cast it, then the card goes to exile and the creature may be cast from there
+  adventureOf?: CardDef;  // set on the adventure half while it's on the stack: the card's real face
   modalBack?: CardDef;    // modal double-faced card: the other face you may play instead (only lands are played)
   kicker?: ManaCost;
   offspring?: boolean;    // the kicker is an offspring cost: a 1/1 token copy enters too

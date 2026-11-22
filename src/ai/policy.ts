@@ -30,6 +30,17 @@ const KW_VALUE: Record<string, number> = {
 };
 
 /** How much a permanent on the battlefield is worth to its controller. */
+/** The counter type whose last removal makes you lose the game (Archfiend of the Dross: OIL), if any. */
+export function losesWhenOutOf(d: CardDef): string | undefined {
+  for (const t of d.triggers) {
+    let e = t.effect;
+    if (e?.api !== 'RemoveCounter') continue;
+    const type = e.params.CounterType;
+    for (e = e.sub; e; e = e.sub) if (e.api === 'LosesGame') return type?.toUpperCase();
+  }
+  return undefined;
+}
+
 export function permValue(g: Game, perm: Perm): number {
   const d = perm.def;
   let v: number;
@@ -39,6 +50,9 @@ export function permValue(g: Game, perm: Perm): number {
     for (const k of st.keywords) v += KW_VALUE[k] ?? 0;
     v += (d.triggers.length + d.statics.length + d.abilities.filter(a => a.kind !== 'mana').length) * 0.7;
     if (perm.token) v -= 0.5;
+    // "remove a counter at upkeep; with none left, you lose" (Archfiend of the Dross): a liability near the end
+    const doom = losesWhenOutOf(d);
+    if (doom && (perm.counters[doom] ?? 0) <= 1) v = -20;
   } else if (d.types.includes('Planeswalker')) {
     v = (perm.counters.LOYALTY ?? 0) + d.mv + 2;
   } else if (isLandCard(perm)) {
@@ -158,6 +172,7 @@ function canBlock(g: Game, b: Perm, a: Perm): boolean {
   if (!isCreature(b) || b.tapped || g.cantBlock(b) || g.unblockable(a)) return false;
   const ka = g.statsOf(a).keywords, kb = g.statsOf(b).keywords;
   if (ka.includes('Flying') && !kb.includes('Flying') && !kb.includes('Reach')) return false;
+  if (ka.includes('Shadow') !== kb.includes('Shadow')) return false;     // shadow only blocks / is blocked by shadow
   if (g.protectedFrom(a, b, b.controller)) return false;                 // protection: can't be blocked by it
   return true;
 }
@@ -493,6 +508,29 @@ export function effectScore(g: Game, eff: Effect, ctx: Ctx, depth = 0): number {
       case 'Sacrifice': s = P.Defined === 'Opponent' || P.Defined === 'Player.Opponent' ? 3 : -1; break;
       case 'SetState': s = 6; break;
       case 'Mill': s = 0.2; break;
+      case 'LosesGame': s = -100; break;
+      case 'RemoveCounter': s = 0; break;
+      case 'PeekAndReveal': s = 2; break;
+      case 'TwoPiles': s = 0.5 * g.bf.filter(x => x.controller === them).reduce((a, x) => a + Math.max(0, permValue(g, x)), 0); break;
+      case 'ChooseCard': {
+        if (P.ChoiceZone === 'Exile' && /VOID/.test(P.Choices ?? '')) {
+          // Dauthi Voidwalker: worth it when a void card beats the 3/2 shadow body we give up
+          const pool = g.players[them].exile.filter(c => (c as CardInst & { voidCounter?: boolean }).voidCounter && !isLandCard(c));
+          const best = pool.length ? Math.max(...pool.map(c => cardValue(g, g.players[me], c) + c.def.mv * 0.6)) : 0;
+          s = pool.length ? best - (ctx.source ? permValue(g, ctx.source) : 4) : -5;
+          return s;
+        }
+        if (/^Creature/.test(P.Choices ?? '')) s = myCreatures(g, me).length ? 2.5 : -1;   // Gix's Command counters + lifelink
+        break;
+      }
+      case 'RepeatEach': {
+        // Gix's Command: each opponent sacrifices their creature with the greatest power
+        const theirs = myCreatures(g, them);
+        if (!theirs.length) { s = -1; break; }
+        const top = Math.max(...theirs.map(x => g.statsOf(x).power));
+        s = 1 + Math.min(...theirs.filter(x => g.statsOf(x).power === top).map(x => permValue(g, x)));
+        break;
+      }
       default: s = 0.5;
     }
   }
@@ -564,7 +602,7 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
     const ok = sacForAlt ? g.payMana(p.id, c.generic, c.pips, false)
       : g.payMana(p.id, c.generic + d.altAdditional.orMana.generic, [...c.pips, ...d.altAdditional.orMana.pips], false);
     if (!ok) return undefined;
-  } else if (!g.canCast(p.id, card, { kicked, x, fromCommand })) return undefined;
+  } else if (!g.playableFromExile(p.id, card)?.free && !g.canCast(p.id, card, { kicked, x, fromCommand })) return undefined;   // free casts (Voidwalker, Gix) need no mana
 
   const permanent = !d.types.includes('Instant') && !d.types.includes('Sorcery');
   let score: number;
@@ -574,6 +612,15 @@ function planSpell(g: Game, p: Player, card: CardInst, fromCommand: boolean, win
     if (d.spell?.effect.api === 'Attach' && !d.subtypes.includes('Equipment') && !auraHostFor(g, d, p.id)) return undefined;
     score = 5 + cardValue(g, p, card);
     if (!d.types.includes('Creature') && /lose \d+ life|you lose 1 life/i.test(d.oracle) && p.life <= 8) score -= 6;
+    // Archfiend of the Dross: we lose in a few upkeeps unless it's gone. Cast it only when it should end the
+    // game in time, or when we can sacrifice it later.
+    const doom = losesWhenOutOf(d);
+    if (doom) {
+      const turnsLeft = Math.max(1, +(d.keywords.find(k => k.startsWith(`etbCounter:${doom}:`))?.split(':')[2] ?? 4) - 1);
+      const clock = turnsLeft * (boardPower(g, p.id) + (d.power ?? 0)) * 0.8;
+      const sacOutlet = g.bf.some(x => x.controller === p.id && x.def.abilities.some(ab => ab.cost.sac && /Creature|Permanent/.test(ab.cost.sac.filter)));
+      if (clock < g.players[g.opp(p.id)].life && !sacOutlet) return undefined;
+    }
     if (d.keywords.includes('Flash') && window !== 'instant' && p.style === 'control'
       && boardPower(g, p.id) >= boardPower(g, g.opp(p.id))) return undefined;
     if (d.subtypes.includes('Equipment') && !myCreatures(g, p.id).length) score -= 3;
@@ -619,6 +666,8 @@ function costPayable(g: Game, p: Player, perm: Perm, ab: Ability): boolean {
   if (c.tap && (perm.tapped || (isCreature(perm) && perm.sick && !g.has(perm, 'Haste')))) return false;
   if (c.payLife && p.life <= c.payLife + 2) return false;
   if (c.discard && p.hand.length < c.discard) return false;
+  if (c.discardX && p.hand.length < 1) return false;
+  if (c.exileGrave && graveFodder(g, p, c.exileGrave).length < c.exileGrave.n) return false;
   if (c.blight && !g.cheapBlight(p.id, c.blight)) return false;
   if (c.tapType && tapTypeFodder(g, p, c.tapType).length < c.tapType.n) return false;
   if (ab.effect.params.Activation === 'Solved' && !perm.attrs?.includes('Solved')) return false;
@@ -646,14 +695,31 @@ function tapTypeFodder(g: Game, p: Player, t: { n: number; filter: string }) {
     .sort((a, b) => permValue(g, a) - permValue(g, b));
 }
 
+/** Cards in your graveyard of a kind to exile for a cost, least useful first (creatures you might reanimate last). */
+function graveFodder(g: Game, p: Player, t: { n: number; filter: string }) {
+  return p.graveyard.filter(c => matches(t.filter, g.subjectOf(c, p.id), { you: p.id })).sort((a, b) => cardValue(g, p, a) - cardValue(g, p, b));
+}
+
+/** How many cards to discard for an "X = cards discarded" cost (Gix): every card we can't cast soon, at least two. */
+function discardXCount(g: Game, p: Player): number {
+  const lands = g.bf.filter(x => x.controller === p.id && x.def.types.includes('Land')).length;
+  return p.hand.filter(c => isLandCard(c) || c.def.mv > lands).length >= 2 ? p.hand.filter(c => isLandCard(c) || c.def.mv > lands).length : p.hand.length;
+}
+
 function sacFodder(g: Game, p: Player, perm: Perm, sac: { n: number; filter: string }) {
   return g.bf.filter(x => x.controller === p.id && matches(sac.filter, g.subjectOf(x), { you: p.id, sourceId: perm.id }));
 }
 
-function payCost(g: Game, p: Player, perm: Perm, ab: Ability): number {
+function payCost(g: Game, p: Player, perm: Perm, ab: Ability, x = 0): number {
   const c = ab.cost;
   let sacPower = 0;
   if (c.tap) perm.tapped = true;
+  if (c.exileGrave) for (const e of graveFodder(g, p, c.exileGrave).slice(0, c.exileGrave.n)) { p.graveyard.splice(p.graveyard.indexOf(e), 1); p.exile.push(e); g.trace(`exiles ${e.def.name} from the graveyard`, p.id); }
+  if (c.discardX && x > 0) {
+    const worst = [...p.hand].sort((a, b) => cardValue(g, p, a) - cardValue(g, p, b)).slice(0, x);
+    g.batchDiscards(() => { for (const d of worst) g.discard(p, d); });
+    g.trace(`discards ${x} card${x > 1 ? 's' : ''}`, p.id);
+  }
   if (c.mana.generic || c.mana.pips.length) g.payMana(p.id, c.mana.generic, c.mana.pips, true);
   if (c.payLife) g.loseLife(p.id, c.payLife);
   if (c.discard) for (let i = 0; i < c.discard; i++) { const d = chooseDiscard(g, p); if (d) g.discard(p, d); }
@@ -681,6 +747,7 @@ function costPenalty(g: Game, p: Player, perm: Perm, ab: Ability): number {
   }
   if (c.payLife) pen += c.payLife * (p.life < 10 ? 0.8 : 0.25);
   if (c.discard) pen += 1.5 * c.discard;
+  if (c.exileGrave) pen += 0.3 * c.exileGrave.n;
   if (c.blight) pen += c.blight * 0.8;
   if (c.tapType) pen += c.tapType.n * 0.7;
   if (c.tap && isCreature(perm) && g.phase !== 'end' && g.active === p.id && g.phase === 'main1') pen += 2;
@@ -742,6 +809,11 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
         if (perm.attachedTo !== undefined && g.bf.some(x => x.id === perm.attachedTo)) return;
         if (!myCreatures(g, p.id).length) return;
         score = 3;
+      } else if (ab.cost.discardX) {
+        // Gix: discard X, then cast the top X cards of the opponent's library for free. Each swap is a card upgrade.
+        ctx.x = discardXCount(g, p);
+        if (ctx.x < 2) return;
+        score = ctx.x * 1.8;
       } else {
         score = effectScore(g, ab.effect, ctx);
         if (ab.planeswalker) {
@@ -758,8 +830,11 @@ function abilityActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant
         run: () => {
           activatedThisWindow.add(key);
           if (!costPayable(g, p, perm, ab)) return false;
-          const sp = payCost(g, p, perm, ab);
+          const sp = payCost(g, p, perm, ab, ctx.x);
           g.trace(`activates ${perm.def.name}: ${ab.description ?? ab.effect.api}`, p.id);
+          g.emit({ type: 'activate', player: p.id, perm });
+          g.resolveTriggers();
+          if (g.over) return true;
           g.resolveEffect(ab.effect, { ...ctx, sacrificedPower: sp });
           g.checkSBA();
           return true;
@@ -866,6 +941,24 @@ export function bestowHost(g: Game, pid: number, self: Perm): Perm | undefined {
 function altCastActions(g: Game, p: Player, window: 'main1' | 'main2' | 'instant'): Action[] {
   if (window === 'instant') return [];
   const acts: Action[] = [];
+  // Blitz: a hasty attacker that replaces itself. From hand only when the normal cost is out of reach
+  // (or it's precombat and haste matters); from the graveyard (Tenacious Underdog) whenever we can afford it.
+  for (const c of [...p.hand, ...p.graveyard]) {
+    const b = g.blitzCost(c);
+    if (!b || window !== 'main1' || p.life <= b.life + 6) continue;
+    const inYard = p.graveyard.includes(c);
+    if (inYard && !g.blitzFromGraveyard(c)) continue;
+    if (!g.canCast(p.id, c, { altCost: b.mana })) continue;
+    const score = inYard ? 5 + (c.def.power ?? 0) * 0.5 : (!g.canCast(p.id, c) ? 3 : 0) + (c.def.power ?? 0) * 0.4;
+    if (score < 1.5) continue;
+    acts.push({ score, label: `blitz ${c.def.name}${inYard ? ' from graveyard' : ''}`, run: () => g.castSpell(p.id, c, { blitz: true }) });
+  }
+  // Spectacle: cheaper once an opponent has lost life this turn
+  for (const c of p.hand) {
+    const sc = g.keywordCost(c, 'Spectacle');
+    if (sc === undefined || !g.players.some(x => x.id !== p.id && x.lifeLostThisTurn > 0) || !g.canCast(p.id, c, { altCost: sc })) continue;
+    acts.push({ score: 5.6 + cardValue(g, p, c), label: `cast ${c.def.name} (spectacle)`, run: () => g.castSpell(p.id, c, { spectacle: true }) });
+  }
   for (const c of p.hand) {
     const bc = g.keywordCost(c, 'Bestow');
     if (bc !== undefined && myCreatures(g, p.id).length && g.canCast(p.id, c, { altCost: bc })) {
@@ -982,6 +1075,15 @@ export function mainPhase(g: Game, p: Player, phase: 1 | 2) {
       if (!g.inExile(m.card) || m.card.def.land) continue;
       const plan = planSpell(g, p, m.card, false, window);
       if (plan) acts.push(castAction(g, p, m.card, false, { ...plan, fromExile: true }));
+    }
+    // adventure halves (Swift End): plan the spell as if the card were its adventure
+    for (const card of p.hand) {
+      const front = card.def;
+      if (!front.adventure) continue;
+      card.def = front.adventure;
+      let plan: Plan | undefined;
+      try { plan = planSpell(g, p, card, false, window); } finally { card.def = front; }
+      if (plan) acts.push({ score: plan.score + 0.5, label: `cast ${front.adventure.name} (adventure)`, run: () => g.castSpell(p.id, card, { adventure: true }) });
     }
     acts.push(...warpActions(g, p, window));
     acts.push(...impendingActions(g, p, window));
@@ -1452,7 +1554,12 @@ export function chooseDiscard(g: Game, p: Player): CardInst {
   return p.hand.reduce((a, b) => (cardValue(g, p, a) <= cardValue(g, p, b) ? a : b), p.hand[0]);
 }
 
-export function bestCardInHand(g: Game, pl: Player): CardInst {
+/** The card in a player's hand that hurts them most to lose. With a filter (Thoughtseize: nonland), only those count; none → undefined. */
+export function bestCardInHand(g: Game, pl: Player, filter?: string): CardInst {
+  if (filter && filter !== 'Card') {
+    const ok = pl.hand.filter(c => matches(filter, g.subjectOf(c, pl.id), { you: pl.id }));
+    return (ok.length ? ok.reduce((a, b) => (cardValue(g, pl, a) >= cardValue(g, pl, b) ? a : b), ok[0]) : undefined) as CardInst;
+  }
   const spells = pl.hand.filter(c => !isLandCard(c));
   const pool = spells.length ? spells : pl.hand;
   return pool.reduce((a, b) => (cardValue(g, pl, a) >= cardValue(g, pl, b) ? a : b), pool[0]);

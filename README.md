@@ -34,7 +34,7 @@ Set `FORGE_RES=/path/to/forge/forge-gui/res` to use a Forge checkout somewhere e
 ## Commands
 
 ```bash
-npm run sim -- match    <deckA.txt> <deckB.txt> [--games 500] [--format standard|standard-brawl|brawl] [--turns 25] [--seed 1]
+npm run sim -- match    <deckA.txt> <deckB.txt> [--games 500] [--format standard|standard-brawl|brawl|commander] [--turns 25] [--seed 1]
 npm run sim -- gauntlet <deck.txt> [dir] [--games 300]      # dir defaults to the deck's format's gauntlet
 npm run sim -- coverage <deck.txt>        # which cards the engine ignores or approximates
 npm run sim -- trace    <deckA.txt> <deckB.txt> [--seed 1]   # play-by-play of one game
@@ -50,7 +50,7 @@ missing or unflagged, with how many of Erick's decks and gauntlet decks use it a
 `--defs` prints each rule's first sentence. [docs/mechanics.md](docs/mechanics.md) is the latest report.
 
 The format comes from the first deck: Standard without a commander, Standard Brawl with a commander and
-60 cards, Brawl with a commander and 100 cards.
+60 cards, Brawl with a commander and 100 cards. A `# format: commander` line marks a paper Commander deck.
 Run `SHOW_HANDS=1 npm run sim -- trace ...` to also print both hands each turn.
 
 Games alternate who goes first. Traces show stack fights as `casts X in response to Y` and `Y fizzles`. The CI column is a 95% Wilson interval, so differences
@@ -118,8 +118,13 @@ Each format has its own gauntlet, so a deck is tested like against like. The for
 | Standard | no `Commander` section | 20 life | `decks/gauntlet/standard` (18 decks) |
 | Standard Brawl | commander, 60 cards | 25 life, commander tax | `decks/gauntlet/standard-brawl` (7 decks) |
 | Brawl | commander, 100 cards | 25 life, commander tax | `decks/gauntlet/brawl` (8 decks) |
+| Commander (paper) | `# format: commander` line | 40 life, commander tax, 21 commander damage loses, free first mulligan | `decks/gauntlet/commander` (8 decks) |
 
-`gauntlet` uses the deck's own gauntlet unless you pass a folder; `--format standard|standard-brawl|brawl`
+Commander is played **1v1** (the engine is two-player): no multiplayer table, politics or threat assessment.
+`coverage` also checks a Commander deck's legality: Forge's Commander banned list and the commander's color
+identity (card colors plus mana symbols in rules text).
+
+`gauntlet` uses the deck's own gauntlet unless you pass a folder; `--format standard|standard-brawl|brawl|commander`
 overrides detection. The UI ticks the matching gauntlet automatically and remembers your ticks per format.
 
 Where the decks come from (captured October 12, 2026; each file's header has its source and stats):
@@ -130,6 +135,9 @@ Where the decks come from (captured October 12, 2026; each file's header has its
 - **Brawl**: the top eight commanders on Untapped's
   [Competitive Brawl](https://mtga.untapped.gg/constructed/competitive-brawl/tier-list) tier list, using each
   one's most-played 100-card list. Untapped keeps Brawl win rates behind Premium, so none are recorded.
+- **Commander**: the eight Brawl meta decks with their Commander-banned cards swapped out (Library of
+  Alexandria → Sol Ring, Paradox Engine → Thran Dynamo, Emrakul, the Aeons Torn → Ghalta). They're strong
+  Arena lists, not a paper cEDH or EDHREC meta; a paper-sourced gauntlet would be a good next step.
 - **Standard Brawl**: no site tracks it, so these are 60-card singleton prototypes of current Standard
   archetypes, each led by a legend that archetype plays (plus Spider-Man 2099, the tier-A Brawl commander).
   Each starts from the archetype's Untapped list, then adds the most-played Standard cards on Untapped in

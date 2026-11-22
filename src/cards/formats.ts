@@ -12,7 +12,8 @@ const formats = new Map<string, FormatDef>();
 export function loadFormat(name: string): FormatDef {
   const hit = formats.get(name);
   if (hit) return hit;
-  const file = path.join(forgeRes(), 'formats/Sanctioned', `${name}.txt`);
+  const sanctioned = path.join(forgeRes(), 'formats/Sanctioned', `${name}.txt`);
+  const file = fs.existsSync(sanctioned) ? sanctioned : path.join(forgeRes(), 'formats/Casual', `${name}.txt`);   // Commander lives in Casual
   const text = fs.readFileSync(file, 'utf8');
   const field = (k: string) => text.match(new RegExp(`^${k}:(.*)$`, 'm'))?.[1] ?? '';
   const def: FormatDef = {
@@ -64,12 +65,27 @@ export function cardsInSet(code: string): Set<string> {
   return names;
 }
 
+/**
+ * Commander color identity: the card's colors plus every colored mana symbol in its rules text (and back face).
+ * Approximates the rule closely enough for deck checks; reminder text is stripped first.
+ */
+export function colorIdentity(def: { colors: string[]; oracle: string; back?: { colors: string[]; oracle: string } }): Set<string> {
+  const out = new Set<string>(def.colors);
+  for (const face of [def, def.back].filter(Boolean) as { colors: string[]; oracle: string }[]) {
+    face.colors.forEach(c => out.add(c));
+    const text = face.oracle.replace(/\([^)]*\)/g, '');
+    for (const m of text.matchAll(/\{([^}]+)\}/g)) for (const ch of m[1].split('/')) if (/^[WUBRG]$/.test(ch)) out.add(ch);
+  }
+  return out;
+}
+
 /** True when the card is printed in one of the format's sets and is not banned. Basic lands are always legal. */
 export function isLegal(card: string, format = 'Standard'): boolean {
   const name = card.toLowerCase();
   if (/^(snow-covered )?(plains|island|swamp|mountain|forest|wastes)$/.test(name)) return !name.startsWith('snow') || format !== 'Standard';
   const f = loadFormat(format);
   if (f.banned.has(name) || f.banned.has(name.split(' // ')[0])) return false;
+  if (!f.sets.size) return true;            // eternal formats with only a banned list (Commander)
   for (const code of f.sets) {
     const cards = cardsInSet(code);
     if (cards.has(name) || cards.has(name.split(' // ')[0])) return true;
