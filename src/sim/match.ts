@@ -4,7 +4,7 @@ import type { DeckList } from '../engine/state.js';
 
 export interface MatchOptions {
   games: number;
-  format: 'standard' | 'brawl';
+  format: 'standard' | 'brawl' | 'commander';
   maxTurns: number;
   seed: number;
   trace?: boolean;

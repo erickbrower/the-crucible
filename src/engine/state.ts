@@ -33,6 +33,7 @@ export interface Perm extends CardInst {
   noUntap?: boolean;
   earthbent?: boolean;      // a land turned into a creature by earthbend: returns to play tapped when it dies
   baseDef?: CardDef;        // printed characteristics while temporarily animated (a crewed Vehicle)
+  blitzed?: boolean;        // cast for its blitz cost: haste, draws a card when it dies, sacrificed at the next end step
   warped?: boolean;         // cast for its warp cost: exiled at the next end step
   giftPromised?: boolean;   // cast with its gift promised
   attacksThisTurn?: number; // times it attacked this turn ("attacks for the first time each turn")
@@ -46,6 +47,7 @@ export interface DeckList {
   name: string;
   main: CardDef[];
   commander?: CardDef;
+  format?: 'standard' | 'standard-brawl' | 'brawl' | 'commander';   // set by a "# format:" line in the deck file
 }
 
 export interface Player {
@@ -70,6 +72,7 @@ export interface Player {
   attackedThisTurn: boolean;
   creaturesDiedThisTurn: number;
   mulligans: number;
+  commanderDamage?: Record<number, number>;   // Commander: combat damage taken from each commander (by permanent id)
   speed?: number;           // Start your engines! (0/undefined = no speed; max 4)
   speedTurn?: number;       // turn the speed last increased
   warpExile?: { card: CardInst; turn: number }[];   // warped cards that may be cast from exile on a later turn

@@ -5,7 +5,7 @@ import type { CardDef, Color } from '../cards/model.js';
 import type { CardStat } from '../sim/match.js';
 import type { OwnedCard } from './collection.js';
 import { Format, FORMAT_LABEL, FORMAT_SIZE, deckFormat, needsStandardLegal } from '../sim/format.js';
-import { isLegal } from '../cards/formats.js';
+import { isLegal, colorIdentity } from '../cards/formats.js';
 
 export type { Format };
 
@@ -45,12 +45,26 @@ export function inspectDeck(text: string, fallbackName = 'My deck'): { info: Dec
       expectedSize: FORMAT_SIZE[format],
       colors: deckColors(deck),
       missing: deck.missing,
-      illegal: needsStandardLegal(format) ? names.filter(n => !deck.missing.includes(n) && !isLegal(n)) : [],
+      illegal: needsStandardLegal(format) ? names.filter(n => !deck.missing.includes(n) && !isLegal(n))
+        : format === 'commander' ? commanderIllegal(deck) : [],
       duplicates: format === 'standard' ? [] : [...copies].filter(([n, k]) => k > 1 && !BASIC.test(n)).map(([n]) => n),
       unmodeled: [...cov].filter(([, n]) => n.length).map(([name, notes]) => ({ name, notes })),
       distinct: cov.size,
     },
   };
+}
+
+/** Paper Commander: banned cards and cards outside the commander's color identity. */
+export function commanderIllegal(deck: LoadedDeck): string[] {
+  const cmd = deck.list.commander;
+  const allowed = cmd ? colorIdentity(cmd) : new Set<string>();
+  const out = new Set<string>();
+  for (const d of [cmd, ...deck.list.main]) {
+    if (!d) continue;
+    if (!isLegal(d.name, 'Commander')) out.add(`${d.name} (banned)`);
+    else if (cmd && d !== cmd && [...colorIdentity(d)].some(c => !allowed.has(c))) out.add(`${d.name} (outside color identity)`);
+  }
+  return [...out];
 }
 
 /** Brawl: the commander's colors. Standard: every color among the nonland cards. */

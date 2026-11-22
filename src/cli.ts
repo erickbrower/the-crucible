@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 // Usage:
-//   npm run sim -- match <deckA.txt> <deckB.txt> [--games 500] [--format standard|standard-brawl|brawl] [--turns 20] [--seed 1]
+//   npm run sim -- match <deckA.txt> <deckB.txt> [--games 500] [--format standard|standard-brawl|brawl|commander] [--turns 20] [--seed 1]
 //   npm run sim -- gauntlet <deck.txt> [<gauntlet dir>] [--games 300]     (default dir: the deck's own format's gauntlet)
 //   npm run sim -- coverage <deck.txt>
 //   npm run sim -- trace <deckA.txt> <deckB.txt> [--seed 1]
@@ -10,6 +10,7 @@ import path from 'node:path';
 import { loadDeck, deckCoverage, LoadedDeck } from './sim/deck.js';
 import { runMatch, pct, wilson, MatchOptions } from './sim/match.js';
 import { mechanicsReport, mechanicsMarkdown, rulesDate, RULES_FILE } from './tools/mechanics.js';
+import { commanderIllegal } from './ui/analysis.js';
 import { Format, FORMAT_LABEL, deckFormat, engineRules, gauntletDir, parseFormat } from './sim/format.js';
 
 function parseArgs(argv: string[]) {
@@ -40,7 +41,7 @@ function matchOpts(flags: Record<string, string>, fmt: Format): MatchOptions {
   return {
     games: +(flags.games ?? 500),
     format: engineRules(fmt),
-    maxTurns: +(flags.turns ?? 25),
+    maxTurns: +(flags.turns ?? (fmt === 'commander' ? 30 : 25)),   // 40 life makes Commander games longer
     seed: +(flags.seed ?? 1),
   };
 }
@@ -62,7 +63,7 @@ function main() {
   if (cmd === 'mechanics') {
     if (!fs.existsSync(RULES_FILE)) { console.error('Comprehensive Rules not found: run `npm run fetch-rules` first.'); process.exit(1); }
     const text = fs.readFileSync(RULES_FILE, 'utf8');
-    const rows = mechanicsReport(text, [{ dir: 'decks/mine', mine: true }, ...['standard', 'standard-brawl', 'brawl'].map(f => ({ dir: `decks/gauntlet/${f}`, mine: false }))]);
+    const rows = mechanicsReport(text, [{ dir: 'decks/mine', mine: true }, ...['standard', 'standard-brawl', 'brawl', 'commander'].map(f => ({ dir: `decks/gauntlet/${f}`, mine: false }))]);
     if (flags.md) {
       fs.mkdirSync(path.dirname(flags.md), { recursive: true });
       fs.writeFileSync(flags.md, mechanicsMarkdown(rows, rulesDate(text), flags.all === 'true'));
@@ -116,6 +117,11 @@ function main() {
       console.log(`${name}\n  - ${notes.join('\n  - ')}`);
     }
     console.log(`\n${clean}/${cov.size} distinct cards fully modeled; ${A.size} cards total.`);
+    if (formatOf(A, flags) === 'commander') {
+      const bad = commanderIllegal(A);
+      console.log(bad.length ? `Commander legality problems: ${bad.join(', ')}` : 'Commander legal: no banned cards, everything inside the commander\'s color identity.');
+      if (A.size !== 100) console.log(`! Commander decks are exactly 100 cards (this one has ${A.size}).`);
+    }
     return;
   }
   console.log('commands: match <A> <B> | gauntlet <deck> [dir] | coverage <deck> | trace <A> <B>   (flags: --games --format --turns --seed)');

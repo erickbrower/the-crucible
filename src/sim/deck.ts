@@ -11,14 +11,17 @@ import path from 'node:path';
 import { loadCard, coverage } from '../cards/compile.js';
 import type { CardDef } from '../cards/model.js';
 import type { DeckList } from '../engine/state.js';
+import { Format, parseFormat } from './format.js';
 
-export interface ParsedDeck { name: string; commander?: string; main: { count: number; name: string }[] }
+export interface ParsedDeck { name: string; commander?: string; format?: Format; main: { count: number; name: string }[] }
 
 export function parseDeckText(text: string, name = 'deck'): ParsedDeck {
   const out: ParsedDeck = { name, main: [] };
   let section: 'deck' | 'commander' | 'skip' = 'deck';
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
+    const fm = line.match(/^(?:#|\/\/)\s*format\s*:\s*(.+)$/i);    // "# format: commander" marks paper Commander
+    if (fm) { out.format = parseFormat(fm[1].trim()); continue; }
     if (!line || line.startsWith('#') || line.startsWith('//')) continue;
     const head = line.toLowerCase();
     if (head === 'commander') { section = 'commander'; continue; }
@@ -53,7 +56,7 @@ export function buildDeck(parsed: ParsedDeck): LoadedDeck {
     if (d) for (let i = 0; i < count; i++) main.push(d);
   }
   const commander = parsed.commander ? get(parsed.commander) : undefined;
-  return { list: { name: parsed.name, main, commander }, missing, size: main.length + (commander ? 1 : 0) };
+  return { list: { name: parsed.name, main, commander, format: parsed.format }, missing, size: main.length + (commander ? 1 : 0) };
 }
 
 /** Per-card coverage notes for a deck (cards the engine ignores or approximates). */

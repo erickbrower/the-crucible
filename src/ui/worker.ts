@@ -12,7 +12,7 @@ export interface MatchTask {
   games: number;
   seed: number;
   maxTurns: number;
-  format: 'standard' | 'brawl';
+  format: 'standard' | 'brawl' | 'commander';
 }
 
 export type WorkerMsg =

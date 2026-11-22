@@ -19,6 +19,7 @@ describe('format detection', () => {
     expect(engineRules('standard')).toBe('standard');
     expect(engineRules('standard-brawl')).toBe('brawl');
     expect(engineRules('brawl')).toBe('brawl');
+    expect(engineRules('commander')).toBe('commander');
   });
   it('accepts common names for formats', () => {
     expect(parseFormat('Standard Brawl')).toBe('standard-brawl');
@@ -60,7 +61,8 @@ for (const fmt of FORMATS) {
 
         if (fmt !== 'brawl') {
           const names = [parsed.commander, ...counts.keys()].filter(Boolean) as string[];
-          expect(names.filter(n => !isLegal(n))).toEqual([]);
+          const legalIn = fmt === 'commander' ? 'Commander' : 'Standard';
+          expect(names.filter(n => !isLegal(n, legalIn))).toEqual([]);
         }
         if (deck.list.commander) {
           const ident = new Set(deck.list.commander.colors);
@@ -71,7 +73,7 @@ for (const fmt of FORMATS) {
         // Smoke test: the engine can play this deck against every opponent in its gauntlet.
         for (const f2 of files) {
           const other = loadDeck(path.join(dir, f2));
-          const r = runMatch(deck.list, other.list, { games: 2, format: engineRules(fmt), maxTurns: 25, seed: 7 });
+          const r = runMatch(deck.list, other.list, { games: 2, format: engineRules(fmt), maxTurns: fmt === 'commander' ? 30 : 25, seed: 7 });
           expect(r.games).toBe(2);
         }
       });
